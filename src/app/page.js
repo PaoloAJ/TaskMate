@@ -1,9 +1,12 @@
 import React from "react";
 import Navbar from "./components/Navbar";
+import Link from "next/link";
+
+
 
 function page() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#FFF6D9] to-[#F5E6B8]">
+    <div className="min-h-screen bg-white">
       <Navbar />
 
       {/* Main content with vertical split */}
@@ -46,9 +49,10 @@ function page() {
             </div>
 
             <div className="pt-4">
-              <button className="bg-[#8B5A96] hover:bg-[#7A4A85] text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200">
+              <Link href="/signup"
+              className="bg-[#8B5A96] hover:bg-[#7A4A85] text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 cursor-pointer">
                 Get Started
-              </button>
+              </Link>
             </div>
           </div>
 
