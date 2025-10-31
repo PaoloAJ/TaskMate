@@ -1,10 +1,36 @@
-import React from "react";
+'use client';
+
+import React, { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
 import Navbar from "./components/Navbar";
 import Link from "next/link";
 
+export default function HomePage() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuth();
 
+  // Redirect to dashboard if user is already authenticated
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.push('/dashboard');
+    }
+  }, [isAuthenticated, isLoading, router]);
 
-function page() {
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
+  // Don't render landing page if authenticated (will redirect)
+  if (isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-white">
       <Navbar />
@@ -49,8 +75,10 @@ function page() {
             </div>
 
             <div className="pt-4">
-              <Link href="/signup"
-              className="bg-[#8B5A96] hover:bg-[#7A4A85] text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 cursor-pointer">
+              <Link
+                href="/signup"
+                className="bg-[#8B5A96] hover:bg-[#7A4A85] text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 cursor-pointer"
+              >
                 Get Started
               </Link>
             </div>
@@ -146,5 +174,3 @@ function page() {
     </div>
   );
 }
-
-export default page;

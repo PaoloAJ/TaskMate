@@ -1,27 +1,32 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Amplify } from "aws-amplify";
-import { signUp } from "aws-amplify/auth";
+import { signIn } from "aws-amplify/auth";
 import outputs from "../../../amplify_outputs.json";
 import Navbar from "../components/Navbar";
 
-export default function SignUpPage() {
+export default function SignInPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    confirmPassword: "",
-    name: "",
   });
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   // Configure Amplify on component mount
   useEffect(() => {
     Amplify.configure(outputs, { ssr: true });
-  }, []);
+
+    // Check if user just verified their email
+    if (searchParams.get("verified") === "true") {
+      setSuccessMessage("Email verified! Please sign in.");
+    }
+  }, [searchParams]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -45,24 +50,10 @@ export default function SignUpPage() {
       newErrors.email = "Email is required";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "Email is invalid";
-    } else if (!formData.email.endsWith(".edu")) {
-      newErrors.email = "Email must end with .edu";
     }
 
     if (!formData.password) {
       newErrors.password = "Password is required";
-    } else if (formData.password.length < 8) {
-      newErrors.password =
-        "Password must be at least 8 characters with uppercase, lowercase, numbers, and symbols";
-    }
-
-    if (!formData.name) {
-      newErrors.name = "Name is required";
-    }
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = "Please confirm your password";
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
     }
 
     setErrors(newErrors);
@@ -77,44 +68,45 @@ export default function SignUpPage() {
     }
 
     setIsLoading(true);
+    setErrors({});
+    setSuccessMessage("");
 
     try {
-      const { userId, nextStep } = await signUp({
+      const { isSignedIn, nextStep } = await signIn({
         username: formData.email,
         password: formData.password,
-        options: {
-          userAttributes: {
-            email: formData.email,
-          },
-        },
       });
 
-      console.log("Sign up successful!", { userId, nextStep });
+      console.log("Sign in successful!", { isSignedIn, nextStep });
 
-      // Check if email verification is needed
-      if (nextStep.signUpStep === "CONFIRM_SIGN_UP") {
-        // Redirect to verification page
-        router.push(`/verify?email=${encodeURIComponent(formData.email)}`);
-      } else if (nextStep.signUpStep === "DONE") {
-        // User is signed up and confirmed, redirect to sign in
-        router.push("/signin");
+      if (isSignedIn) {
+        // Redirect to dashboard or home page
+        router.push("/dashboard");
+      } else if (nextStep.signInStep === "CONFIRM_SIGN_UP") {
+        // User needs to verify email
+        setErrors({ general: "Please verify your email first." });
+        setTimeout(() => {
+          router.push(`/verify?email=${encodeURIComponent(formData.email)}`);
+        }, 2000);
       }
     } catch (error) {
-      console.error("Sign up error:", error);
+      console.error("Sign in error:", error);
 
       // Handle specific Amplify errors
-      if (error.name === "UsernameExistsException") {
-        setErrors({ email: "An account with this email already exists" });
-      } else if (error.name === "InvalidPasswordException") {
-        setErrors({ password: error.message });
-      } else if (error.name === "InvalidParameterException") {
-        setErrors({
-          general: "Invalid input. Please check your information.",
-        });
+      if (error.name === "NotAuthorizedException") {
+        setErrors({ general: "Incorrect email or password." });
+      } else if (error.name === "UserNotConfirmedException") {
+        setErrors({ general: "Please verify your email first." });
+        setTimeout(() => {
+          router.push(`/verify?email=${encodeURIComponent(formData.email)}`);
+        }, 2000);
+      } else if (error.name === "UserNotFoundException") {
+        setErrors({ general: "No account found with this email." });
+      } else if (error.name === "TooManyRequestsException") {
+        setErrors({ general: "Too many attempts. Please try again later." });
       } else {
         setErrors({
-          general:
-            error.message || "Failed to create account. Please try again.",
+          general: error.message || "Failed to sign in. Please try again.",
         });
       }
     } finally {
@@ -129,41 +121,26 @@ export default function SignUpPage() {
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
             <h2 className="mt-6 text-3xl font-bold text-purple-800">
-              Create Account
+              Welcome Back
             </h2>
-            <p className="mt-2 text-sm text-purple-600">Join TaskMate</p>
+            <p className="mt-2 text-sm text-purple-600">
+              Sign in to your TaskMate account
+            </p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <form noValidate className="space-y-6" onSubmit={handleSubmit}>
+              {successMessage && (
+                <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+                  <p className="text-sm text-green-600">{successMessage}</p>
+                </div>
+              )}
+
               {errors.general && (
                 <div className="p-3 rounded-lg bg-red-50 border border-red-200">
                   <p className="text-sm text-red-600">{errors.general}</p>
                 </div>
               )}
-
-              <div>
-                <label
-                  htmlFor="name"
-                  className="block text-sm font-medium text-gray-700 mb-2"
-                >
-                  Full Name
-                </label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 ${
-                    errors.name ? "border-red-500" : "border-gray-300"
-                  }`}
-                  placeholder="Enter your name"
-                />
-                {errors.name && (
-                  <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-                )}
-              </div>
 
               <div>
                 <label
@@ -211,31 +188,28 @@ export default function SignUpPage() {
                 )}
               </div>
 
-              <div>
-                <label
-                  htmlFor="confirmPassword"
-                  className="block text-sm font-medium text-gray-700 mb-2"
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <input
+                    id="remember-me"
+                    name="remember-me"
+                    type="checkbox"
+                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                  />
+                  <label
+                    htmlFor="remember-me"
+                    className="ml-2 block text-sm text-gray-700"
+                  >
+                    Remember me
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  className="text-sm text-purple-600 hover:text-purple-500 font-medium transition-colors duration-200"
                 >
-                  Confirm Password
-                </label>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 ${
-                    errors.confirmPassword
-                      ? "border-red-500"
-                      : "border-gray-300"
-                  }`}
-                  placeholder="Confirm your password"
-                />
-                {errors.confirmPassword && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {errors.confirmPassword}
-                  </p>
-                )}
+                  Forgot password?
+                </button>
               </div>
 
               <button
@@ -246,10 +220,10 @@ export default function SignUpPage() {
                 {isLoading ? (
                   <div className="flex items-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Creating Account...
+                    Signing In...
                   </div>
                 ) : (
-                  "Create Account"
+                  "Sign In"
                 )}
               </button>
             </form>
@@ -266,11 +240,11 @@ export default function SignUpPage() {
 
               <div className="mt-6 text-center">
                 <button
-                  onClick={() => router.push("/signin")}
+                  onClick={() => router.push("/signup")}
                   type="button"
                   className="text-purple-600 hover:text-purple-500 font-medium transition-colors duration-200"
                 >
-                  Already have an account? Sign in
+                  Don't have an account? Sign up
                 </button>
               </div>
             </div>
