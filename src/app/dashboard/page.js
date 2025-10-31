@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { fetchAuthSession } from 'aws-amplify/auth';
-import { useAuth } from '@/lib/auth-context';
-import Navbar from '../components/Navbar';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { fetchAuthSession } from "aws-amplify/auth";
+import { useAuth } from "@/lib/auth-context";
+import Navbar from "../components/Navbar";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -15,7 +15,7 @@ export default function DashboardPage() {
   // Redirect to sign-in if not authenticated
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push('/signin');
+      router.push("/signin");
     }
   }, [isAuthenticated, isLoading, router]);
 
@@ -27,7 +27,7 @@ export default function DashboardPage() {
           const session = await fetchAuthSession();
           setTokens(session.tokens);
         } catch (error) {
-          console.error('Error fetching tokens:', error);
+          console.error("Error fetching tokens:", error);
         }
       }
     };
@@ -59,9 +59,7 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold text-purple-800">
               Welcome to Your Dashboard
             </h1>
-            <p className="mt-2 text-gray-600">
-              You're successfully signed in!
-            </p>
+            <p className="mt-2 text-gray-600">You're successfully signed in!</p>
           </div>
 
           {user && (
@@ -71,8 +69,13 @@ export default function DashboardPage() {
                   User Information
                 </h2>
                 <div className="space-y-1 text-sm">
-                  <p><span className="font-medium">User ID:</span> {user.userId}</p>
-                  <p><span className="font-medium">Username:</span> {user.username}</p>
+                  <p>
+                    <span className="font-medium">User ID:</span> {user.userId}
+                  </p>
+                  <p>
+                    <span className="font-medium">Username:</span>{" "}
+                    {user.username}
+                  </p>
                 </div>
               </div>
 
@@ -85,30 +88,39 @@ export default function DashboardPage() {
                     onClick={() => setShowTokens(!showTokens)}
                     className="px-4 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors duration-200"
                   >
-                    {showTokens ? 'Hide' : 'Show'} Tokens
+                    {showTokens ? "Hide" : "Show"} Tokens
                   </button>
                 </div>
 
                 {showTokens && tokens && (
                   <div className="space-y-3 mt-4">
                     <div>
-                      <p className="font-medium text-sm text-gray-700 mb-1">ID Token:</p>
+                      <p className="font-medium text-sm text-gray-700 mb-1">
+                        ID Token:
+                      </p>
                       <div className="bg-white p-3 rounded border border-gray-300 overflow-x-auto">
-                        <code className="text-xs break-all">{tokens.idToken.toString()}</code>
+                        <code className="text-xs break-all">
+                          {tokens.idToken.toString()}
+                        </code>
                       </div>
                     </div>
 
                     <div>
-                      <p className="font-medium text-sm text-gray-700 mb-1">Access Token:</p>
+                      <p className="font-medium text-sm text-gray-700 mb-1">
+                        Access Token:
+                      </p>
                       <div className="bg-white p-3 rounded border border-gray-300 overflow-x-auto">
-                        <code className="text-xs break-all">{tokens.accessToken.toString()}</code>
+                        <code className="text-xs break-all">
+                          {tokens.accessToken.toString()}
+                        </code>
                       </div>
                     </div>
 
                     <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mt-3">
                       <p className="text-xs text-yellow-800">
-                        <strong>Note:</strong> Never expose these tokens in production!
-                        This is for educational purposes only. Copy and paste them into{' '}
+                        <strong>Note:</strong> Never expose these tokens in
+                        production! This is for educational purposes only. Copy
+                        and paste them into{" "}
                         <a
                           href="https://jwt.io"
                           target="_blank"
@@ -116,8 +128,8 @@ export default function DashboardPage() {
                           className="text-purple-600 hover:underline"
                         >
                           jwt.io
-                        </a>
-                        {' '}to decode and see the contents.
+                        </a>{" "}
+                        to decode and see the contents.
                       </p>
                     </div>
                   </div>

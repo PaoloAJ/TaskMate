@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Amplify } from "aws-amplify";
 import { signIn } from "aws-amplify/auth";
+import { useAuth } from "@/lib/auth-context";
 import outputs from "../../../amplify_outputs.json";
 import Navbar from "../components/Navbar";
 
 export default function SignInPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { refreshAuth } = useAuth();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -80,6 +82,8 @@ export default function SignInPage() {
       console.log("Sign in successful!", { isSignedIn, nextStep });
 
       if (isSignedIn) {
+        // Refresh auth context before redirecting
+        await refreshAuth();
         // Redirect to dashboard or home page
         router.push("/dashboard");
       } else if (nextStep.signInStep === "CONFIRM_SIGN_UP") {
