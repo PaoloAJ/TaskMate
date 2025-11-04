@@ -1,62 +1,72 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Amplify } from "aws-amplify";
-import { signIn } from "aws-amplify/auth";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { updateUserAttributes, fetchUserAttributes } from "aws-amplify/auth";
 import { useAuth } from "@/lib/auth-context";
-import outputs from "../../../amplify_outputs.json";
 import Navbar from "../components/Navbar";
 
-export default function SignInPage() {
+export default function DashboardPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const { refreshAuth } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
+
   const [formData, setFormData] = useState({
-    email: "",
-    password: "",
+    username: "",
+    school: "",
+    interests: ["", "", ""],
+    bio: "",
   });
+
   const [errors, setErrors] = useState({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
+  const [success, setSuccess] = useState("");
+  const [attributes, setAttributes] = useState(null);
 
-  // Configure Amplify on component mount
+  // Redirect unauthenticated users
   useEffect(() => {
-    Amplify.configure(outputs, { ssr: true });
-
-    // Check if user just verified their email
-    if (searchParams.get("verified") === "true") {
-      setSuccessMessage("Email verified! Please sign in.");
+    if (!isLoading && !isAuthenticated) {
+      router.push("/signin");
     }
-  }, [searchParams]);
+  }, [isAuthenticated, isLoading, router]);
 
-  const handleInputChange = (e) => {
+  // Load existing user attributes
+  useEffect(() => {
+    const loadAttributes = async () => {
+      try {
+        const attrs = await fetchUserAttributes();
+        setAttributes(attrs);
+      } catch (error) {
+        console.error("Failed to fetch user attributes:", error);
+      }
+    };
+    if (isAuthenticated) loadAttributes();
+  }, [isAuthenticated]);
+
+  const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-    // Clear error when user starts typing
-    if (errors[name]) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: "",
-      }));
-    }
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => ({ ...prev, [name]: "" }));
+  };
+
+  const handleInterestChange = (index, value) => {
+    const updated = [...formData.interests];
+    updated[index] = value;
+    setFormData((prev) => ({ ...prev, interests: updated }));
   };
 
   const validateForm = () => {
     const newErrors = {};
+    const { username, interests, bio } = formData;
 
-    if (!formData.email) {
-      newErrors.email = "Email is required";
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = "Email is invalid";
-    }
+    if (!username.trim()) newErrors.username = "Username is required.";
+    else if (username.length < 3 || username.length > 15)
+      newErrors.username = "Must be 3–15 characters.";
 
-    if (!formData.password) {
-      newErrors.password = "Password is required";
-    }
+    interests.forEach((item, i) => {
+      if (item.length > 15)
+        newErrors[`interest${i}`] = "Interest must be ≤15 chars.";
+    });
+
+    if (bio.length > 100) newErrors.bio = "Bio must be ≤100 characters.";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -64,201 +74,164 @@ export default function SignInPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
-
-    setIsLoading(true);
-    setErrors({});
-    setSuccessMessage("");
+    if (!validateForm()) return;
 
     try {
-      const { isSignedIn, nextStep } = await signIn({
-        username: formData.email,
-        password: formData.password,
+      await updateUserAttributes({
+        userAttributes: {
+          nickname: formData.username,
+          "custom:school": formData.school,
+          "custom:interests": JSON.stringify(formData.interests),
+          "custom:bio": formData.bio,
+        },
       });
 
-      console.log("Sign in successful!", { isSignedIn, nextStep });
-
-      if (isSignedIn) {
-        // Refresh auth context before redirecting
-        await refreshAuth();
-        // Redirect to dashboard or home page
-        router.push("/dashboard");
-      } else if (nextStep.signInStep === "CONFIRM_SIGN_UP") {
-        // User needs to verify email
-        setErrors({ general: "Please verify your email first." });
-        setTimeout(() => {
-          router.push(`/verify?email=${encodeURIComponent(formData.email)}`);
-        }, 2000);
-      }
+      setSuccess("Profile updated successfully!");
+      setTimeout(() => setSuccess(""), 3000);
     } catch (error) {
-      console.error("Sign in error:", error);
-
-      // Handle specific Amplify errors
-      if (error.name === "NotAuthorizedException") {
-        setErrors({ general: "Incorrect email or password." });
-      } else if (error.name === "UserNotConfirmedException") {
-        setErrors({ general: "Please verify your email first." });
-        setTimeout(() => {
-          router.push(`/verify?email=${encodeURIComponent(formData.email)}`);
-        }, 2000);
-      } else if (error.name === "UserNotFoundException") {
-        setErrors({ general: "No account found with this email." });
-      } else if (error.name === "TooManyRequestsException") {
-        setErrors({ general: "Too many attempts. Please try again later." });
-      } else {
-        setErrors({
-          general: error.message || "Failed to sign in. Please try again.",
-        });
-      }
-    } finally {
-      setIsLoading(false);
+      console.error("Error updating profile:", error);
+      setErrors({ general: "Failed to update profile. Try again." });
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return null;
+
   return (
-    <div className="min-h-screen">
-      <Navbar variant="auth" />
-      <div className="flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
-        <div className="max-w-md w-full space-y-8">
-          <div className="text-center">
-            <h2 className="mt-6 text-3xl font-bold text-purple-800">
-              Welcome Back
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <Navbar variant="dashboard" />
+
+      <div className="flex flex-col items-start px-8 py-12 space-y-10 w-full">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">TaskMate</h1>
+          <p className="text-xl font-medium text-gray-800 mt-4">
+            Hello {user?.username || "User"}
+          </p>
+        </div>
+
+        {/* Profile Setup Form */}
+        <div className="flex justify-center w-full mt-8">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+            <h2 className="text-xl font-semibold text-purple-800 mb-6 text-center">
+              Finish Setting Up Your Profile
             </h2>
-            <p className="mt-2 text-sm text-purple-600">
-              Sign in to your TaskMate account
-            </p>
-          </div>
 
-          <div className="bg-white rounded-2xl shadow-xl p-8">
-            <form noValidate className="space-y-6" onSubmit={handleSubmit}>
-              {successMessage && (
-                <div className="p-3 rounded-lg bg-green-50 border border-green-200">
-                  <p className="text-sm text-green-600">{successMessage}</p>
-                </div>
-              )}
+            {success && (
+              <div className="p-3 rounded-lg bg-green-50 border border-green-200 mb-4 text-center">
+                <p className="text-sm text-green-600">{success}</p>
+              </div>
+            )}
 
-              {errors.general && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                  <p className="text-sm text-red-600">{errors.general}</p>
-                </div>
-              )}
+            {errors.general && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 mb-4 text-center">
+                <p className="text-sm text-red-600">{errors.general}</p>
+              </div>
+            )}
 
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Username */}
               <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-gray-700 mb-2"
-                >
-                  Email Address
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Username <span className="text-red-500">*</span>
                 </label>
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 ${
-                    errors.email ? "border-red-500" : "border-gray-300"
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  placeholder="Enter username"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 transition-all ${
+                    errors.username ? "border-red-500" : "border-gray-300"
                   }`}
-                  placeholder="Enter your email"
                 />
-                {errors.email && (
-                  <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                {errors.username && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {errors.username}
+                  </p>
                 )}
               </div>
 
+              {/* School */}
               <div>
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-700 mb-2"
-                >
-                  Password
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  School
                 </label>
                 <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 ${
-                    errors.password ? "border-red-500" : "border-gray-300"
-                  }`}
-                  placeholder="Enter your password"
+                  type="text"
+                  name="school"
+                  value={formData.school}
+                  onChange={handleChange}
+                  placeholder="Enter your school"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 border-gray-300"
                 />
-                {errors.password && (
-                  <p className="mt-1 text-sm text-red-600">{errors.password}</p>
+              </div>
+
+              {/* Interests */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Interests (up to 3)
+                </label>
+                <div className="space-y-2">
+                  {formData.interests.map((interest, i) => (
+                    <input
+                      key={i}
+                      type="text"
+                      value={interest}
+                      onChange={(e) => handleInterestChange(i, e.target.value)}
+                      placeholder={`Interest ${i + 1}`}
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 transition-all ${
+                        errors[`interest${i}`]
+                          ? "border-red-500"
+                          : "border-gray-300"
+                      }`}
+                    />
+                  ))}
+                </div>
+                {Object.keys(errors)
+                  .filter((k) => k.startsWith("interest"))
+                  .map((k) => (
+                    <p key={k} className="mt-1 text-sm text-red-600">
+                      {errors[k]}
+                    </p>
+                  ))}
+              </div>
+
+              {/* Bio */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Bio
+                </label>
+                <textarea
+                  name="bio"
+                  value={formData.bio}
+                  onChange={handleChange}
+                  placeholder="Tell us a bit about yourself"
+                  rows={3}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 transition-all ${
+                    errors.bio ? "border-red-500" : "border-gray-300"
+                  }`}
+                />
+                {errors.bio && (
+                  <p className="mt-1 text-sm text-red-600">{errors.bio}</p>
                 )}
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <input
-                    id="remember-me"
-                    name="remember-me"
-                    type="checkbox"
-                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                  />
-                  <label
-                    htmlFor="remember-me"
-                    className="ml-2 block text-sm text-gray-700"
-                  >
-                    Remember me
-                  </label>
-                </div>
-
-                <button
-                  type="button"
-                  className="text-sm text-purple-600 hover:text-purple-500 font-medium transition-colors duration-200"
-                >
-                  Forgot password?
-                </button>
-              </div>
-
+              {/* Submit */}
               <button
                 type="submit"
-                disabled={isLoading}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-semibold hover:bg-purple-700 transition"
               >
-                {isLoading ? (
-                  <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Signing In...
-                  </div>
-                ) : (
-                  "Sign In"
-                )}
+                Save Changes
               </button>
             </form>
-
-            <div className="mt-6">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">Or</span>
-                </div>
-              </div>
-
-              <div className="mt-6 text-center">
-                <button
-                  onClick={() => router.push("/signup")}
-                  type="button"
-                  className="text-purple-600 hover:text-purple-500 font-medium transition-colors duration-200"
-                >
-                  Don't have an account? Sign up
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-center text-sm text-gray-500">
-            <p>
-              By continuing, you agree to our Terms of Service and Privacy
-              Policy
-            </p>
           </div>
         </div>
       </div>
