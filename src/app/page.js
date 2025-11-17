@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -13,7 +13,7 @@ export default function HomePage() {
   // Redirect to dashboard if user is already authenticated
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.push('/dashboard');
+      router.push("/dashboard");
     }
   }, [isAuthenticated, isLoading, router]);
 
@@ -27,9 +27,9 @@ export default function HomePage() {
   }
 
   // Don't render landing page if authenticated (will redirect)
-  if (isAuthenticated) {
-    return null;
-  }
+  // if (isAuthenticated) {
+  //   return null;
+  // }
 
   return (
     <div className="min-h-screen bg-white">
