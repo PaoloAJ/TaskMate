@@ -43,18 +43,18 @@ function Navbar({ variant = "default" }) {
           {/* Navigation Links - only show on default page when not authenticated */}
           {isDefPage && !isAuthenticated && (
             <div className="hidden md:flex items-center space-x-6">
-              <a
-                href="#"
-                className="text-[#563478]/70 hover:text-[#563478] transition-colors"
-              >
-                Home
-              </a>
-              <a
-                href="#"
-                className="text-[#563478]/70 hover:text-[#563478] transition-colors"
-              >
-                Leaderboard
-              </a>
+              <Link href="/">
+                <span className="text-[#563478]/70 hover:text-[#563478] transition-colors cursor-pointer">Home</span>
+              </Link>
+              <Link href="/leaderboard">
+                <span className="text-[#563478]/70 hover:text-[#563478] transition-colors cursor-pointer">Leaderboard</span>
+              </Link>
+              <Link href="/buddy">
+                <span className="text-[#563478]/70 hover:text-[#563478] transition-colors cursor-pointer">Buddy</span>
+              </Link>
+              <Link href="/finder">
+                <span className="text-[#563478]/70 hover:text-[#563478] transition-colors cursor-pointer">Finder</span>
+              </Link>
             </div>
           )}
 
