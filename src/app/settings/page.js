@@ -144,13 +144,13 @@ export default function Page() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Email (read-only)</label>
+                  <label className="block text-sm font-medium text-gray-700">Email</label>
                   <input value={formData.email} readOnly className="w-full mt-1 px-3 py-2 border rounded bg-gray-50" />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Username</label>
-                  <input name="username" value={formData.username} onChange={handleChange} className="w-full mt-1 px-3 py-2 border rounded" />
+                  <input name="username" value={formData.username} readOnly className="w-full mt-1 px-3 py-2 border rounded bg-gray-50" />
                 </div>
 
                 <div>
