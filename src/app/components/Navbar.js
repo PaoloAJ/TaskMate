@@ -40,23 +40,33 @@ function Navbar({ variant = "default" }) {
             </Link>
           </div>
 
-          {/* Navigation Links - only show on default page when not authenticated */}
-          {isDefPage && !isAuthenticated && (
-            <div className="hidden md:flex items-center space-x-6">
-              <a
-                href="#"
-                className="text-[#563478]/70 hover:text-[#563478] transition-colors"
-              >
-                Home
-              </a>
-              <a
-                href="#"
-                className="text-[#563478]/70 hover:text-[#563478] transition-colors"
-              >
-                Leaderboard
-              </a>
-            </div>
-          )}
+          {/* Navigation Links - visible on medium+ screens */}
+          <div className="hidden md:flex items-center space-x-6">
+            <Link
+              href="/"
+              className="text-[#563478]/70 hover:text-[#563478] transition-colors"
+            >
+              Home
+            </Link>
+            <Link
+              href="/leaderboard"
+              className="text-[#563478]/70 hover:text-[#563478] transition-colors"
+            >
+              Leaderboard
+            </Link>
+            <Link
+              href="/task"
+              className="text-[#563478]/70 hover:text-[#563478] transition-colors"
+            >
+              Task
+            </Link>
+            <Link
+              href="/chat"
+              className="text-[#563478]/70 hover:text-[#563478] transition-colors"
+            >
+              Chat
+            </Link>
+          </div>
 
           {/* Right side buttons */}
           <div className="flex items-center space-x-3">

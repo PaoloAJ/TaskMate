@@ -9,6 +9,13 @@ export default function Page() {
     { id: 1, users: ["Alex Kim", "Samira Noor"], streak: 18 },
     { id: 2, users: ["Riley Park", "Jordan Li"], streak: 12 },
     { id: 3, users: ["Taylor Smith", "Avery Cole"], streak: 9 },
+    { id: 4, users: ["Maya Gomez", "Ethan Brown"], streak: 22 },
+    { id: 5, users: ["Kai Nguyen", "Liam Patel"], streak: 16 },
+    { id: 6, users: ["Zoe Martinez", "Noah Davis"], streak: 14 },
+    { id: 7, users: ["Olivia Chen", "Lucas Green"], streak: 11 },
+    { id: 8, users: ["Isabella Rossi", "Mason Clark"], streak: 8 },
+    { id: 9, users: ["Chloe Adams", "Benjamin Young"], streak: 6 },
+    { id: 10, users: ["Sofia Lopez", "Jack Wilson"], streak: 4 },
   ];
 
   // Users only have one buddy at a time; `activeBuddy` is the constant buddy on the right (or null)
