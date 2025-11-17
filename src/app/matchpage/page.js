@@ -38,20 +38,25 @@ export default function Page() {
         <div className="max-w-6xl mx-auto grid grid-cols-12 gap-6">
           {/* Left list */}
           <div className="col-span-8">
-            <div className="h-full border-4 border-blue-400 rounded-lg bg-white p-6">
-              <div className="space-y-6">
+            <div className="bg-white border border-gray-200 rounded-lg p-4 h-full">
+              <h2 className="text-xl font-semibold mb-4">Users</h2>
+
+              <div className="space-y-3">
                 {placeholders.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => setSelected(p)}
-                    className={`w-full text-left flex items-center gap-6 p-4 rounded-md transition hover:bg-gray-100 focus:outline-none ${
+                    className={`w-full flex items-center space-x-4 p-3 rounded-md hover:bg-gray-50 transition text-left ${
                       selected?.id === p.id ? "ring-2 ring-purple-300" : ""
                     }`}
-                    aria-pressed={selected?.id === p.id}
                   >
-                    <div className="h-10 w-10 rounded-full bg-black flex-shrink-0"></div>
-                    <div>
-                      <div className="text-lg font-medium text-gray-900">{p.username} &nbsp;|&nbsp; {p.school} &nbsp;|&nbsp; {p.interests.join(", ")}</div>
+                    <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center text-white font-semibold">
+                      {p.username.charAt(0)}
+                    </div>
+
+                    <div className="text-sm text-gray-700">
+                      <div className="font-medium">{p.username}</div>
+                      <div className="text-gray-500 text-xs">{p.school} | {p.interests.join(', ')}</div>
                     </div>
                   </button>
                 ))}
@@ -61,14 +66,30 @@ export default function Page() {
 
           {/* Right profile */}
           <div className="col-span-4">
-            <div className="h-full border rounded-md bg-white p-6 flex flex-col items-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">{selected.username}</h2>
+            <div className="h-full border rounded-md bg-white p-6 flex flex-col">
+              <div className="flex flex-col items-center">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">{selected.username}</h2>
 
-              <div className="h-20 w-20 rounded-full bg-red-500 mb-6"></div>
+                <div className="h-20 w-20 rounded-full bg-red-500 mb-4"></div>
 
-              <div className="text-sm text-gray-600 mb-6">{selected.school}</div>
+                <div className="text-sm text-gray-600 mb-4">{selected.school}</div>
 
-              <div className="text-sm text-gray-700 text-center">{selected.bio}</div>
+                <div className="text-sm text-gray-700 text-center">{selected.bio}</div>
+              </div>
+
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      window.alert(`Buddy request sent to ${selected.username}`);
+                    }
+                  }}
+                  className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition"
+                >
+                  Request Buddy
+                </button>
+              </div>
             </div>
           </div>
         </div>
