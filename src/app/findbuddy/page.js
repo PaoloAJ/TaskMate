@@ -29,6 +29,31 @@ export default function Page() {
   ];
 
   const [selected, setSelected] = useState(placeholders[0]);
+  const [tab, setTab] = useState("received");
+
+  // Placeholder pending requests
+  const [sentRequests, setSentRequests] = useState([
+    { id: 1, username: "carla", school: "Eastside Univ" },
+  ]);
+  const [receivedRequests, setReceivedRequests] = useState([
+    { id: 2, username: "dan", school: "North Tech" },
+    { id: 3, username: "eva", school: "South Arts" },
+  ]);
+
+  const acceptRequest = (id) => {
+    setReceivedRequests((prev) => prev.filter((r) => r.id !== id));
+    if (typeof window !== 'undefined') window.alert('Friend request accepted');
+  };
+
+  const rejectRequest = (id) => {
+    setReceivedRequests((prev) => prev.filter((r) => r.id !== id));
+    if (typeof window !== 'undefined') window.alert('Friend request rejected');
+  };
+
+  const cancelRequest = (id) => {
+    setSentRequests((prev) => prev.filter((r) => r.id !== id));
+    if (typeof window !== 'undefined') window.alert('Friend request canceled');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -89,6 +114,69 @@ export default function Page() {
                 >
                   Request Buddy
                 </button>
+              </div>
+
+              {/* Pending Friend Requests */}
+              <div className="mt-6 w-full">
+                <div className="border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-3">Pending Friend Requests</h3>
+
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      className={`px-3 py-1 rounded ${tab === 'received' ? 'bg-purple-600 text-white' : 'bg-gray-100'}`}
+                      onClick={() => setTab('received')}
+                    >
+                      Received
+                    </button>
+                    <button
+                      className={`px-3 py-1 rounded ${tab === 'sent' ? 'bg-purple-600 text-white' : 'bg-gray-100'}`}
+                      onClick={() => setTab('sent')}
+                    >
+                      Sent
+                    </button>
+                  </div>
+
+                  <div>
+                    {tab === 'received' ? (
+                      <div className="space-y-3">
+                        {receivedRequests.length === 0 ? (
+                          <div className="text-sm text-gray-500">No received requests.</div>
+                        ) : (
+                          receivedRequests.map((r) => (
+                            <div key={r.id} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                              <div>
+                                <div className="font-medium">{r.username}</div>
+                                <div className="text-xs text-gray-500">{r.school}</div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={() => acceptRequest(r.id)} className="px-3 py-1 bg-green-600 text-white rounded">Accept</button>
+                                <button onClick={() => rejectRequest(r.id)} className="px-3 py-1 bg-red-500 text-white rounded">Reject</button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {sentRequests.length === 0 ? (
+                          <div className="text-sm text-gray-500">No sent requests.</div>
+                        ) : (
+                          sentRequests.map((s) => (
+                            <div key={s.id} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                              <div>
+                                <div className="font-medium">{s.username}</div>
+                                <div className="text-xs text-gray-500">{s.school}</div>
+                              </div>
+                              <div>
+                                <button onClick={() => cancelRequest(s.id)} className="px-3 py-1 bg-red-500 text-white rounded">Cancel</button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
