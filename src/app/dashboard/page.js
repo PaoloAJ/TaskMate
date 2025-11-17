@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateUserAttributes, fetchUserAttributes } from "aws-amplify/auth";
 import { useAuth } from "@/lib/auth-context";
 import Navbar from "../components/Navbar";
+import fallbackInterests from "@/lib/interests.json";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -12,15 +13,20 @@ export default function DashboardPage() {
 
   const [formData, setFormData] = useState({
     username: "",
-    school: "",
     interests: ["", "", ""],
     bio: "",
+    selectedUniversity: "", // New field for university selection
   });
 
   const [errors, setErrors] = useState({});
   const [success, setSuccess] = useState("");
   const [attributes, setAttributes] = useState(null);
-
+  const [universities, setUniversities] = useState([]); // State to store universities
+    const [universityInput, setUniversityInput] = useState(""); // State for typing in university field
+    const [showUniversityDropdown, setShowUniversityDropdown] = useState(false); // State for dropdown visibility
+  const [availableInterests, setAvailableInterests] = useState(null); // Interests list (null = loading)
+  const [interestInputs, setInterestInputs] = useState(["", "", ""]);
+  const [showInterestDropdown, setShowInterestDropdown] = useState([false, false, false]);
   // Redirect unauthenticated users
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -41,39 +47,123 @@ export default function DashboardPage() {
     if (isAuthenticated) loadAttributes();
   }, [isAuthenticated]);
 
+  // Load universities list from the JSON file using fetch
+  useEffect(() => {
+    const loadUniversities = async () => {
+      try {
+        const response = await fetch("/us_universities_names_only.json"); // Adjust the path based on your setup
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        setUniversities(data);
+      } catch (error) {
+        console.error("Failed to load universities:", error);
+      }
+    };
+    loadUniversities();
+  }, []);
+
+  // Load interests list from the JSON file using fetch
+  useEffect(() => {
+    const loadInterests = async () => {
+      try {
+        const base = window?.location?.origin || '';
+        const response = await fetch(`${base}/interests.json`);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        setAvailableInterests(data);
+      } catch (error) {
+        console.error('Failed to load interests:', error);
+        // Use local fallback bundled with the app so selects always populate
+        setAvailableInterests(fallbackInterests || []);
+      }
+    };
+    loadInterests();
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
-  const handleInterestChange = (index, value) => {
+  // Interest input updated as user types (typeahead)
+  const handleInterestInputChange = (index, value) => {
+    const inputs = [...interestInputs];
+    inputs[index] = value;
+    setInterestInputs(inputs);
+    setShowInterestDropdown((prev) => {
+      const copy = [...prev];
+      copy[index] = true;
+      return copy;
+    });
+    setErrors((prev) => ({ ...prev, [`interest${index}`]: "" }));
+  };
+
+  // User selects an interest from dropdown
+  const handleInterestSelect = (index, value) => {
+    // Prevent duplicates
+    if (value && formData.interests.includes(value) && formData.interests[index] !== value) {
+      setErrors((prev) => ({ ...prev, [`interest${index}`]: "Already selected." }));
+      return;
+    }
+
     const updated = [...formData.interests];
     updated[index] = value;
     setFormData((prev) => ({ ...prev, interests: updated }));
+
+    const inputs = [...interestInputs];
+    inputs[index] = value;
+    setInterestInputs(inputs);
+
+    setShowInterestDropdown((prev) => {
+      const copy = [...prev];
+      copy[index] = false;
+      return copy;
+    });
+
+    setErrors((prev) => ({ ...prev, [`interest${index}`]: "" }));
   };
+
+    const handleUniversityInputChange = (e) => {
+      const value = e.target.value;
+      setUniversityInput(value);
+      setShowUniversityDropdown(true);
+    };
+
+    const handleUniversitySelect = (university) => {
+      setFormData((prev) => ({ ...prev, selectedUniversity: university }));
+      setUniversityInput(university);
+      setShowUniversityDropdown(false);
+      setErrors((prev) => ({ ...prev, selectedUniversity: "" }));
+    };
+
+    const filteredUniversities = universities.filter((uni) =>
+      uni.toLowerCase().includes(universityInput.toLowerCase())
+    );
 
   const validateForm = () => {
     const newErrors = {};
-    const { username, school, interests, bio } = formData;
+    const { username, interests, bio, selectedUniversity } = formData;
 
     // Username validation
     if (!username.trim()) newErrors.username = "Username is required.";
     else if (username.length < 3 || username.length > 15)
       newErrors.username = "Must be 3–15 characters.";
 
-    // School validation (required)
-    if (!school.trim()) newErrors.school = "School is required.";
-
-    // Interests validation
+    // Interests validation (optional)
     interests.forEach((item, i) => {
-      if (item.length > 15)
+      if (item && item.length > 15)
         newErrors[`interest${i}`] = "Interest must be ≤15 chars.";
     });
 
     // Bio validation (required)
     if (!bio.trim()) newErrors.bio = "Bio is required.";
     else if (bio.length > 100) newErrors.bio = "Bio must be ≤100 characters.";
+
+    // University selection validation (required)
+    if (!selectedUniversity.trim()) newErrors.selectedUniversity = "Please select a university.";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -87,9 +177,9 @@ export default function DashboardPage() {
       await updateUserAttributes({
         userAttributes: {
           nickname: formData.username,
-          "custom:school": formData.school,
           "custom:interests": JSON.stringify(formData.interests),
           "custom:bio": formData.bio,
+          "custom:university": formData.selectedUniversity, // Save selected university
         },
       });
 
@@ -116,12 +206,10 @@ export default function DashboardPage() {
       <Navbar variant="dashboard" />
 
       <div className="flex flex-col items-center px-8 py-12 w-full">
-        {/* Big Header */}
         <h1 className="text-4xl md:text-5xl font-bold text-purple-800 mb-8 text-center">
           Finish Setting Up Your Profile!
         </h1>
 
-        {/* Success/Error Messages */}
         {success && (
           <div className="p-3 rounded-lg bg-green-50 border border-green-200 mb-4 text-center">
             <p className="text-sm text-green-600">{success}</p>
@@ -155,44 +243,109 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* School */}
+          {/* School removed */}
+
+          {/* University Dropdown */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              School <span className="text-red-500">*</span>
+              Select University <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              name="school"
-              value={formData.school}
-              onChange={handleChange}
-              placeholder="Enter your school"
+            <div className="relative">
+              <input
+                type="text"
+              name="selectedUniversity"
+                value={universityInput}
+                onChange={handleUniversityInputChange}
+                onFocus={() => setShowUniversityDropdown(true)}
+                onBlur={() => setShowUniversityDropdown(false)}
+                onKeyDown={(e) => { if (e.key === 'Escape') setShowUniversityDropdown(false); }}
+                placeholder="Type to search universities..."
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 transition-all ${
-                errors.school ? "border-red-500" : "border-gray-300"
+                errors.selectedUniversity ? "border-red-500" : "border-gray-300"
               }`}
-            />
-            {errors.school && (
-              <p className="mt-1 text-sm text-red-600">{errors.school}</p>
+              />
+              {showUniversityDropdown && filteredUniversities.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-lg z-10">
+                  {filteredUniversities.map((university, index) => (
+                    <div
+                      key={index}
+                      onMouseDown={() => handleUniversitySelect(university)}
+                      className="px-4 py-2 hover:bg-purple-100 cursor-pointer transition"
+                    >
+                      {university}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {errors.selectedUniversity && (
+              <p className="mt-1 text-sm text-red-600">
+                {errors.selectedUniversity}
+              </p>
             )}
           </div>
 
           {/* Interests */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Interests (up to 3)
+              Interests (Up to 3)
             </label>
             <div className="space-y-2">
-              {formData.interests.map((interest, i) => (
-                <input
-                  key={i}
-                  type="text"
-                  value={interest}
-                  onChange={(e) => handleInterestChange(i, e.target.value)}
-                  placeholder={`Interest ${i + 1}`}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 transition-all ${
-                    errors[`interest${i}`] ? "border-red-500" : "border-gray-300"
-                  }`}
-                />
-              ))}
+              {formData.interests.map((interest, i) => {
+                const inputValue = interestInputs[i] || "";
+                const filtered =
+                  availableInterests === null
+                    ? []
+                    : availableInterests.filter((opt) =>
+                        opt.toLowerCase().includes(inputValue.toLowerCase())
+                      );
+
+                // Remove any options that are already selected in another slot
+                const visibleOptions = filtered.filter(
+                  (opt) => opt === formData.interests[i] || !formData.interests.includes(opt)
+                );
+
+                return (
+                  <div key={i} className="relative">
+                    <input
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => handleInterestInputChange(i, e.target.value)}
+                      onFocus={() => setShowInterestDropdown((prev) => {
+                        const copy = [...prev]; copy[i] = true; return copy;
+                      })}
+                      onBlur={() => setShowInterestDropdown((prev) => {
+                        const copy = [...prev]; copy[i] = false; return copy;
+                      })}
+                      onKeyDown={(e) => { if (e.key === 'Escape') setShowInterestDropdown((prev) => { const copy = [...prev]; copy[i] = false; return copy; }); }}
+                      placeholder={`Interest ${i + 1} (optional)`}
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 transition-all ${
+                        errors[`interest${i}`] ? "border-red-500" : "border-gray-300"
+                      }`}
+                    />
+
+                    {showInterestDropdown[i] && (
+                      <div className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-lg z-10">
+                        {availableInterests === null ? (
+                          <div className="px-4 py-2 text-sm text-gray-500">Loading interests...</div>
+                        ) : visibleOptions.length === 0 ? (
+                          <div className="px-4 py-2 text-sm text-gray-500">No matching interests</div>
+                        ) : (
+                          visibleOptions.map((opt, idx) => (
+                            <div
+                              key={idx}
+                              onMouseDown={() => handleInterestSelect(i, opt)}
+                              className="px-4 py-2 hover:bg-purple-100 cursor-pointer transition"
+                            >
+                              {opt}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             {Object.keys(errors)
               .filter((k) => k.startsWith("interest"))
@@ -206,7 +359,7 @@ export default function DashboardPage() {
           {/* Bio */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Bio <span className="text-red-500">*</span>
+              Bio (Up to 200 characters) <span className="text-red-500">*</span>
             </label>
             <textarea
               name="bio"
