@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Amplify } from "aws-amplify";
 import { signUp } from "aws-amplify/auth";
-import outputs from "../../../amplify_outputs.json";
-import Navbar from "../components/Navbar";
+import outputs from "../../../../amplify_outputs.json";
+import Navbar from "../../components/Navbar";
 
 export default function SignUpPage() {
   const router = useRouter();

@@ -8,7 +8,7 @@ import Navbar from "../components/Navbar";
 import fallbackInterests from "@/lib/interests.json";
 
 const client = generateClient({
-  authMode: "userPool"
+  authMode: "userPool",
 });
 
 export default function DashboardPage() {
@@ -35,12 +35,8 @@ export default function DashboardPage() {
     false,
     false,
   ]);
-  // Redirect unauthenticated users
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push("/signin");
-    }
-  }, [isAuthenticated, isLoading, router]);
+  // Note: Authentication is now handled by middleware.js
+  // No need for client-side redirect - middleware protects this route
 
   // Load existing user profile from database
   useEffect(() => {
@@ -68,6 +64,10 @@ export default function DashboardPage() {
           });
           setUniversityInput(profile.school || "");
           setInterestInputs(profile.interests || ["", "", ""]);
+
+          // Set cookie to mark profile as complete for middleware
+          document.cookie =
+            "profile_complete=true; path=/; max-age=31536000; SameSite=Lax";
         }
       } catch (error) {
         console.error("Failed to load user profile:", error);
@@ -241,12 +241,23 @@ export default function DashboardPage() {
       }
 
       console.log("Save result:", result);
+
+      // Set cookie to mark profile as complete for middleware
+      document.cookie =
+        "profile_complete=true; path=/; max-age=31536000; SameSite=Lax";
+
       setSuccess("Profile updated successfully!");
-      setTimeout(() => setSuccess(""), 3000);
+
+      // Redirect to matchpage after 1 second
+      setTimeout(() => {
+        router.push("/matchpage");
+      }, 1000);
     } catch (error) {
       console.error("Error updating profile:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
-      setErrors({ general: `Failed to update profile: ${error.message || "Try again."}` });
+      setErrors({
+        general: `Failed to update profile: ${error.message || "Try again."}`,
+      });
     }
   };
 
