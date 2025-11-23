@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { createContext, useContext, useState, useEffect } from 'react';
-import { Amplify } from 'aws-amplify';
-import { getCurrentUser, signOut as amplifySignOut } from 'aws-amplify/auth';
-import outputs from '../../amplify_outputs.json';
+import { createContext, useContext, useState, useEffect } from "react";
+import { Amplify } from "aws-amplify";
+import { getCurrentUser, signOut as amplifySignOut } from "aws-amplify/auth";
+import outputs from "../../amplify_outputs.json";
 
 // Create the Auth Context
 const AuthContext = createContext({
@@ -18,7 +18,7 @@ const AuthContext = createContext({
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
@@ -53,7 +53,7 @@ export function AuthProvider({ children }) {
       await amplifySignOut();
       setUser(null);
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error("Error signing out:", error);
       throw error;
     }
   };
