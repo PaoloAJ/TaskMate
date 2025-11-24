@@ -35,7 +35,9 @@ export async function middleware(request) {
   // PUBLIC ROUTES LOGIC
   if (isPublicRoute) {
     // If user is authenticated and trying to access public routes, redirect to dashboard
-    if (authenticated) {
+    // Allow the root landing page to remain accessible even when authenticated.
+    // Redirect authenticated users away from other public routes (signin/signup/verify)
+    if (authenticated && pathname !== "/") {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     // If user is NOT authenticated, let them access public routes

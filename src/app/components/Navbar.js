@@ -12,6 +12,9 @@ function Navbar({ variant = "default" }) {
   const isAuthPage = variant === "auth";
   const isDashboardPage = variant === "dashboard";
 
+  // Show navigation links only for authenticated users (except on auth/dashboard variants)
+  const showNavLinks = isAuthenticated && !isAuthPage && !isDashboardPage;
+
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -40,33 +43,35 @@ function Navbar({ variant = "default" }) {
             </Link>
           </div>
 
-          {/* Navigation Links - visible on medium+ screens */}
-          <div className="hidden md:flex items-center space-x-6">
-            <Link
-              href="/"
-              className="text-[#563478]/70 hover:text-[#563478] transition-colors"
-            >
-              Home
-            </Link>
-            <Link
-              href="/leaderboard"
-              className="text-[#563478]/70 hover:text-[#563478] transition-colors"
-            >
-              Leaderboard
-            </Link>
-            <Link
-              href="/task"
-              className="text-[#563478]/70 hover:text-[#563478] transition-colors"
-            >
-              Task
-            </Link>
-            <Link
-              href="/chat"
-              className="text-[#563478]/70 hover:text-[#563478] transition-colors"
-            >
-              Chat
-            </Link>
-          </div>
+          {/* Navigation Links - visible on medium+ screens only if authenticated */}
+          {showNavLinks && (
+            <div className="hidden md:flex items-center space-x-6">
+              <Link
+                href="/home"
+                className="text-[#563478]/70 hover:text-[#563478] transition-colors"
+              >
+                Home
+              </Link>
+              <Link
+                href="/leaderboard"
+                className="text-[#563478]/70 hover:text-[#563478] transition-colors"
+              >
+                Leaderboard
+              </Link>
+              <Link
+                href="/task"
+                className="text-[#563478]/70 hover:text-[#563478] transition-colors"
+              >
+                Task
+              </Link>
+              <Link
+                href="/chat"
+                className="text-[#563478]/70 hover:text-[#563478] transition-colors"
+              >
+                Chat
+              </Link>
+            </div>
+          )}
 
           {/* Right side buttons */}
           <div className="flex items-center space-x-3">

@@ -19,7 +19,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Navbar variant="dashboard" />
+      <Navbar variant="default" />
 
       <div className="flex-1 px-8 py-8">
         <div className="max-w-3xl mx-auto">
