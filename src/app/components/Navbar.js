@@ -19,10 +19,13 @@ function Navbar({ variant = "default" }) {
 
   const handleSignOut = async () => {
     try {
+      console.log("Sign out button clicked");
       await signOut();
+      console.log("Sign out successful");
       router.push("/");
     } catch (error) {
       console.error("Error signing out:", error);
+      alert("Failed to sign out. Please try again.");
     }
   };
 
