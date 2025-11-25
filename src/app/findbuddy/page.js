@@ -1,10 +1,65 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Navbar from "../components/Navbar";
+import { generateClient } from "aws-amplify/data";
+import { getCurrentUser } from "aws-amplify/auth";
+// import { useAuth } from "@/lib/auth-context";
+
+const client = generateClient({
+  authMode: "userPool",
+});
 
 export default function Page() {
+  const [users, setUsers] = useState([]);
+  const [nextToken, setNextToken] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  useEffect(() => {
+    async function checkUser() {
+      try {
+        const { userId } = await getCurrentUser();
+        setCurrentUserId(userId);
+        console.log("Current user ID:", userId);
+      } catch (err) {
+        console.log("No user logged in");
+      }
+    }
+    checkUser();
+  }, []);
+
+  const fetchUsers = async (
+    currentToken = null,
+    idToFilter = currentUserId
+  ) => {
+    if (!idToFilter) return;
+    setLoading(true);
+    try {
+      const { data: newUsers, nextToken: newNextToken } =
+        await client.models.UserProfile.list({
+          limit: 10,
+          nextToken: currentToken,
+          filter: {
+            userId: { ne: idToFilter },
+          },
+        });
+      setUsers((prevUsers) => [...prevUsers, ...newUsers]);
+      setNextToken(newNextToken);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (currentUserId) {
+      fetchUsers(null, currentUserId);
+    }
+  }, [currentUserId]);
+
   const placeholders = [
+    // replace placeholders with useres
     {
       id: 1,
       username: "Alvin Cabe",
@@ -28,7 +83,7 @@ export default function Page() {
     },
   ];
 
-  const [selected, setSelected] = useState(placeholders[0]);
+  const [selected, setSelected] = useState(users[0]);
   const [tab, setTab] = useState("received");
 
   // Placeholder pending requests
@@ -40,20 +95,11 @@ export default function Page() {
     { id: 3, username: "eva", school: "South Arts" },
   ]);
 
-  const acceptRequest = (id) => {
-    setReceivedRequests((prev) => prev.filter((r) => r.id !== id));
-    if (typeof window !== 'undefined') window.alert('Friend request accepted');
-  };
+  const acceptRequest = (id) => {};
 
-  const rejectRequest = (id) => {
-    setReceivedRequests((prev) => prev.filter((r) => r.id !== id));
-    if (typeof window !== 'undefined') window.alert('Friend request rejected');
-  };
+  const rejectRequest = (id) => {};
 
-  const cancelRequest = (id) => {
-    setSentRequests((prev) => prev.filter((r) => r.id !== id));
-    if (typeof window !== 'undefined') window.alert('Friend request canceled');
-  };
+  const cancelRequest = (id) => {};
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -67,7 +113,7 @@ export default function Page() {
               <h2 className="text-xl font-semibold mb-4">Users</h2>
 
               <div className="space-y-3">
-                {placeholders.map((p) => (
+                {users.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => setSelected(p)}
@@ -81,7 +127,9 @@ export default function Page() {
 
                     <div className="text-sm text-gray-700">
                       <div className="font-medium">{p.username}</div>
-                      <div className="text-gray-500 text-xs">{p.school} | {p.interests.join(', ')}</div>
+                      <div className="text-gray-500 text-xs">
+                        {p.school} | {p.interests.join(", ")}
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -93,21 +141,29 @@ export default function Page() {
           <div className="col-span-4">
             <div className="h-full border rounded-md bg-white p-6 flex flex-col">
               <div className="flex flex-col items-center">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">{selected.username}</h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                  {/* {selected.id} */}
+                </h2>
 
                 <div className="h-20 w-20 rounded-full bg-red-500 mb-4"></div>
 
-                <div className="text-sm text-gray-600 mb-4">{selected.school}</div>
+                <div className="text-sm text-gray-600 mb-4">
+                  {/* {selected.school} */}
+                </div>
 
-                <div className="text-sm text-gray-700 text-center">{selected.bio}</div>
+                <div className="text-sm text-gray-700 text-center">
+                  {/* {selected.bio} */}
+                </div>
               </div>
 
               <div className="mt-6">
                 <button
                   type="button"
                   onClick={() => {
-                    if (typeof window !== 'undefined') {
-                      window.alert(`Buddy request sent to ${selected.username}`);
+                    if (typeof window !== "undefined") {
+                      window.alert(
+                        `Buddy request sent to ${selected.username}`
+                      );
                     }
                   }}
                   className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition"
@@ -119,38 +175,57 @@ export default function Page() {
               {/* Pending Friend Requests */}
               <div className="mt-6 w-full">
                 <div className="border-t pt-4">
-                  <h3 className="text-lg font-semibold mb-3">Pending Friend Requests</h3>
+                  <h3 className="text-lg font-semibold mb-3">
+                    Pending Friend Requests
+                  </h3>
 
                   <div className="flex gap-2 mb-3">
                     <button
-                      className={`px-3 py-1 rounded ${tab === 'received' ? 'bg-purple-600 text-white' : 'bg-gray-100'}`}
-                      onClick={() => setTab('received')}
+                      className={`px-3 py-1 rounded ${tab === "received" ? "bg-purple-600 text-white" : "bg-gray-100"}`}
+                      onClick={() => setTab("received")}
                     >
                       Received
                     </button>
                     <button
-                      className={`px-3 py-1 rounded ${tab === 'sent' ? 'bg-purple-600 text-white' : 'bg-gray-100'}`}
-                      onClick={() => setTab('sent')}
+                      className={`px-3 py-1 rounded ${tab === "sent" ? "bg-purple-600 text-white" : "bg-gray-100"}`}
+                      onClick={() => setTab("sent")}
                     >
                       Sent
                     </button>
                   </div>
 
                   <div>
-                    {tab === 'received' ? (
+                    {tab === "received" ? (
                       <div className="space-y-3">
                         {receivedRequests.length === 0 ? (
-                          <div className="text-sm text-gray-500">No received requests.</div>
+                          <div className="text-sm text-gray-500">
+                            No received requests.
+                          </div>
                         ) : (
                           receivedRequests.map((r) => (
-                            <div key={r.id} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                            <div
+                              key={r.id}
+                              className="flex items-center justify-between bg-gray-50 p-3 rounded"
+                            >
                               <div>
                                 <div className="font-medium">{r.username}</div>
-                                <div className="text-xs text-gray-500">{r.school}</div>
+                                <div className="text-xs text-gray-500">
+                                  {r.school}
+                                </div>
                               </div>
                               <div className="flex gap-2">
-                                <button onClick={() => acceptRequest(r.id)} className="px-3 py-1 bg-green-600 text-white rounded">Accept</button>
-                                <button onClick={() => rejectRequest(r.id)} className="px-3 py-1 bg-red-500 text-white rounded">Reject</button>
+                                <button
+                                  onClick={() => acceptRequest(r.id)}
+                                  className="px-3 py-1 bg-green-600 text-white rounded"
+                                >
+                                  Accept
+                                </button>
+                                <button
+                                  onClick={() => rejectRequest(r.id)}
+                                  className="px-3 py-1 bg-red-500 text-white rounded"
+                                >
+                                  Reject
+                                </button>
                               </div>
                             </div>
                           ))
@@ -159,16 +234,28 @@ export default function Page() {
                     ) : (
                       <div className="space-y-3">
                         {sentRequests.length === 0 ? (
-                          <div className="text-sm text-gray-500">No sent requests.</div>
+                          <div className="text-sm text-gray-500">
+                            No sent requests.
+                          </div>
                         ) : (
                           sentRequests.map((s) => (
-                            <div key={s.id} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                            <div
+                              key={s.id}
+                              className="flex items-center justify-between bg-gray-50 p-3 rounded"
+                            >
                               <div>
                                 <div className="font-medium">{s.username}</div>
-                                <div className="text-xs text-gray-500">{s.school}</div>
+                                <div className="text-xs text-gray-500">
+                                  {s.school}
+                                </div>
                               </div>
                               <div>
-                                <button onClick={() => cancelRequest(s.id)} className="px-3 py-1 bg-red-500 text-white rounded">Cancel</button>
+                                <button
+                                  onClick={() => cancelRequest(s.id)}
+                                  className="px-3 py-1 bg-red-500 text-white rounded"
+                                >
+                                  Cancel
+                                </button>
                               </div>
                             </div>
                           ))
