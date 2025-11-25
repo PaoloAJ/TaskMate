@@ -102,7 +102,7 @@ export async function middleware(request) {
     if (!hasProfile) {
       return response;
     } else {
-      const homeUrl = new URL("/home", request.url);
+      const homeUrl = new URL("/findbuddy", request.url);
       return NextResponse.redirect(homeUrl);
     }
   }
