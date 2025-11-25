@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Amplify } from "aws-amplify";
 import { signIn } from "aws-amplify/auth";
 import { useAuth } from "@/lib/auth-context";
-import outputs from "../../../../amplify_outputs.json";
 import Navbar from "../../components/Navbar";
 
 export default function SignInPage() {
@@ -20,11 +18,8 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Configure Amplify on component mount
+  // Check if user just verified their email
   useEffect(() => {
-    Amplify.configure(outputs, { ssr: true });
-
-    // Check if user just verified their email
     if (searchParams.get("verified") === "true") {
       setSuccessMessage("Email verified! Please sign in.");
     }

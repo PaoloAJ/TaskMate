@@ -1,10 +1,6 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
-import { configureAmplify } from "@/lib/amplify-config";
-
-// Configure Amplify once for the entire app
-configureAmplify();
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

@@ -92,7 +92,7 @@ export async function middleware(request) {
     // Allow the root landing page to remain accessible even when authenticated.
     // Redirect authenticated users away from other public routes (signin/signup/verify)
     if (authenticated && pathname !== "/") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return NextResponse.redirect(new URL("/home", request.url));
     }
     // If user is NOT authenticated, let them access public routes
     return response;

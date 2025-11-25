@@ -1,62 +1,58 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Navbar from "../components/Navbar";
 import { generateClient } from "aws-amplify/data";
-import { getCurrentUser } from "aws-amplify/auth";
-// import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/auth-context";
 
 const client = generateClient({
   authMode: "userPool",
 });
 
 export default function Page() {
+  const { user } = useAuth();
+
   const [users, setUsers] = useState([]);
   const [nextToken, setNextToken] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState(null);
+  const hasFetchedRef = useRef(false);
 
-  useEffect(() => {
-    async function checkUser() {
-      try {
-        const { userId } = await getCurrentUser();
-        setCurrentUserId(userId);
-        console.log("Current user ID:", userId);
-      } catch (err) {
-        console.log("No user logged in");
-      }
+  const fetchUsers = async (currentToken = null, idToFilter = null) => {
+    if (!idToFilter) {
+      console.log("No user ID to filter by");
+      return;
     }
-    checkUser();
-  }, []);
-
-  const fetchUsers = async (
-    currentToken = null,
-    idToFilter = currentUserId
-  ) => {
-    if (!idToFilter) return;
     setLoading(true);
+    console.log("Fetching users, filtering out user ID:", idToFilter);
     try {
       const { data: newUsers, nextToken: newNextToken } =
         await client.models.UserProfile.list({
           limit: 10,
           nextToken: currentToken,
           filter: {
-            userId: { ne: idToFilter },
+            id: { ne: idToFilter },
           },
         });
+      console.log("Fetched users:", newUsers);
+      console.log("Next token:", newNextToken);
       setUsers((prevUsers) => [...prevUsers, ...newUsers]);
       setNextToken(newNextToken);
     } catch (error) {
       console.error("Error fetching users:", error);
+      console.error("Error details:", JSON.stringify(error, null, 2));
     } finally {
       setLoading(false);
     }
   };
+
   useEffect(() => {
-    if (currentUserId) {
-      fetchUsers(null, currentUserId);
+    if (user?.userId && !hasFetchedRef.current) {
+      console.log("Current user ID:", user.userId);
+      hasFetchedRef.current = true;
+      setUsers([]); // reset users when user changes
+      fetchUsers(null, user.userId);
     }
-  }, [currentUserId]);
+  }, [user?.userId]);
 
   const placeholders = [
     // replace placeholders with useres
@@ -83,8 +79,15 @@ export default function Page() {
     },
   ];
 
-  const [selected, setSelected] = useState(users[0]);
+  const [selected, setSelected] = useState(null);
   const [tab, setTab] = useState("received");
+
+  // Auto-select first user when users are loaded
+  useEffect(() => {
+    if (users.length > 0 && !selected) {
+      setSelected(users[0]);
+    }
+  }, [users, selected]);
 
   // Placeholder pending requests
   const [sentRequests, setSentRequests] = useState([
@@ -112,65 +115,110 @@ export default function Page() {
             <div className="bg-white border border-gray-200 rounded-lg p-4 h-full">
               <h2 className="text-xl font-semibold mb-4">Users</h2>
 
-              <div className="space-y-3">
-                {users.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => setSelected(p)}
-                    className={`w-full flex items-center space-x-4 p-3 rounded-md hover:bg-gray-50 transition text-left ${
-                      selected?.id === p.id ? "ring-2 ring-purple-300" : ""
-                    }`}
-                  >
-                    <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center text-white font-semibold">
-                      {p.username.charAt(0)}
-                    </div>
-
-                    <div className="text-sm text-gray-700">
-                      <div className="font-medium">{p.username}</div>
-                      <div className="text-gray-500 text-xs">
-                        {p.school} | {p.interests.join(", ")}
+              {loading && users.length === 0 ? (
+                <div className="flex items-center justify-center py-8">
+                  <p className="text-gray-500">Loading users...</p>
+                </div>
+              ) : users.length === 0 ? (
+                <div className="flex items-center justify-center py-8">
+                  <p className="text-gray-500">No users found</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {users.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelected(p)}
+                      className={`w-full flex items-center space-x-4 p-3 rounded-md hover:bg-gray-50 transition text-left ${
+                        selected?.id === p.id ? "ring-2 ring-purple-300" : ""
+                      }`}
+                    >
+                      <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center text-white font-semibold">
+                        {p.username?.charAt(0) || "?"}
                       </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+
+                      <div className="text-sm text-gray-700">
+                        <div className="font-medium">
+                          {p.username || "Unknown"}
+                        </div>
+                        <div className="text-gray-500 text-xs">
+                          {p.school || "N/A"} |{" "}
+                          {p.interests?.join(", ") || "No interests"}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {!loading && users.length > 0 && nextToken && (
+                <button
+                  onClick={() => fetchUsers(nextToken, user?.userId)}
+                  className="mt-4 w-full py-2 text-purple-600 hover:bg-purple-50 rounded-md transition"
+                >
+                  Load More
+                </button>
+              )}
             </div>
           </div>
 
           {/* Right profile */}
           <div className="col-span-4">
             <div className="h-full border rounded-md bg-white p-6 flex flex-col">
-              <div className="flex flex-col items-center">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                  {/* {selected.id} */}
-                </h2>
+              {selected ? (
+                <>
+                  <div className="flex flex-col items-center">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                      {selected.username}
+                    </h2>
 
-                <div className="h-20 w-20 rounded-full bg-red-500 mb-4"></div>
+                    <div className="h-20 w-20 rounded-full bg-purple-500 flex items-center justify-center text-white text-3xl font-bold mb-4">
+                      {selected.username?.charAt(0).toUpperCase() || "?"}
+                    </div>
 
-                <div className="text-sm text-gray-600 mb-4">
-                  {/* {selected.school} */}
+                    <div className="text-sm text-gray-600 mb-4">
+                      {selected.school || "No school listed"}
+                    </div>
+
+                    {selected.interests && selected.interests.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-4 justify-center">
+                        {selected.interests.map((interest, idx) => (
+                          <span
+                            key={idx}
+                            className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs"
+                          >
+                            {interest}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="text-sm text-gray-700 text-center">
+                      {selected.bio || "No bio available"}
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof window !== "undefined") {
+                          window.alert(
+                            `Buddy request sent to ${selected.username}`
+                          );
+                        }
+                      }}
+                      className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition"
+                    >
+                      Request Buddy
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  <p>Select a user to view their profile</p>
                 </div>
-
-                <div className="text-sm text-gray-700 text-center">
-                  {/* {selected.bio} */}
-                </div>
-              </div>
-
-              <div className="mt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof window !== "undefined") {
-                      window.alert(
-                        `Buddy request sent to ${selected.username}`
-                      );
-                    }
-                  }}
-                  className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition"
-                >
-                  Request Buddy
-                </button>
-              </div>
+              )}
 
               {/* Pending Friend Requests */}
               <div className="mt-6 w-full">
