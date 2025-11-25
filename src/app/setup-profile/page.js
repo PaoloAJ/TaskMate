@@ -64,10 +64,6 @@ export default function DashboardPage() {
           });
           setUniversityInput(profile.school || "");
           setInterestInputs(profile.interests || ["", "", ""]);
-
-          // Set cookie to mark profile as complete for middleware
-          document.cookie =
-            "profile_complete=true; path=/; max-age=31536000; SameSite=Lax";
         }
       } catch (error) {
         console.error("Failed to load user profile:", error);
@@ -242,15 +238,11 @@ export default function DashboardPage() {
 
       console.log("Save result:", result);
 
-      // Set cookie to mark profile as complete for middleware
-      document.cookie =
-        "profile_complete=true; path=/; max-age=31536000; SameSite=Lax";
-
       setSuccess("Profile updated successfully!");
 
-      // Redirect to matchpage after 1 second
+      // Redirect to findbuddy after 1 second
       setTimeout(() => {
-        router.push("/matchpage");
+        router.push("/findbuddy");
       }, 1000);
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -474,7 +466,7 @@ export default function DashboardPage() {
             type="submit"
             className="w-full bg-purple-600 text-white py-2.5 rounded-lg font-semibold hover:bg-purple-700 transition"
           >
-            Save Changes
+            Continue
           </button>
         </form>
       </div>

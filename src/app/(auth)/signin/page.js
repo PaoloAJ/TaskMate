@@ -84,8 +84,8 @@ export default function SignInPage() {
       if (isSignedIn) {
         // Refresh auth context before redirecting
         await refreshAuth();
-        // Redirect to dashboard or home page
-        router.push("/dashboard");
+        // Redirect to setup-profile page
+        router.push("/setup-profile");
       } else if (nextStep.signInStep === "CONFIRM_SIGN_UP") {
         // User needs to verify email
         setErrors({ general: "Please verify your email first." });
