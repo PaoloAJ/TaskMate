@@ -17,6 +17,25 @@ const schema = a.schema({
       pfp_key: a.string(),
     })
     .authorization((allow) => [allow.authenticated()]),
+
+  Conversations: a
+    .model({
+      id: a.id().required(),
+      members: a.string().array().required(),
+      lastMessage: a.string(),
+      lastMessageAt: a.date(),
+    })
+    .authorization((allow) => [allow.authenticated()]),
+
+  Messages: a
+    .model({
+      id: a.id().required(),
+      conversation_id: a.id().required(),
+      message: a.string(),
+      sender_id: a.id(),
+      created_at: a.datetime(),
+    })
+    .authorization((allow) => [allow.authenticated()]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
