@@ -1,12 +1,14 @@
 "use client";
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
 function Navbar({ variant = "default" }) {
   const router = useRouter();
-  const { isAuthenticated, isLoading, signOut } = useAuth();
+  const { user, isAuthenticated, isLoading, signOut } = useAuth();
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const menuRef = useRef(null);
 
   const isDefPage = variant === "default";
   const isAuthPage = variant === "auth";
@@ -23,6 +25,22 @@ function Navbar({ variant = "default" }) {
       console.error("Error signing out:", error);
     }
   };
+
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    if (!showProfileMenu) return;
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowProfileMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [showProfileMenu]);
 
   return (
     <nav
@@ -73,7 +91,7 @@ function Navbar({ variant = "default" }) {
             </div>
           )}
 
-          {/* Right side buttons */}
+          {/* Right side buttons / profile menu */}
           <div className="flex items-center space-x-3">
             {isAuthPage ? (
               // Auth pages (sign in/sign up) - show home button
@@ -89,14 +107,68 @@ function Navbar({ variant = "default" }) {
               // Loading state
               <div className="w-8 h-8 animate-pulse bg-purple-200 rounded"></div>
             ) : isAuthenticated ? (
-              // Authenticated state - show sign out button
-              <button
-                onClick={handleSignOut}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
-                type="button"
-              >
-                Sign Out
-              </button>
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setShowProfileMenu((s) => !s)}
+                  className="flex items-center space-x-2 focus:outline-none group p-1 rounded-md hover:bg-purple-50 transition-colors focus:ring-2 focus:ring-purple-200"
+                  aria-expanded={showProfileMenu}
+                  aria-haspopup="true"
+                  type="button"
+                >
+                  {user && (user.attributes?.picture || user.picture) ? (
+                    <img
+                      src={user.attributes?.picture || user.picture}
+                      alt="Profile"
+                      className="h-8 w-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium text-gray-700">
+                      {((user && (user.attributes?.name || user.name)) || "U").charAt(0)}
+                    </div>
+                  )}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4 text-gray-600 group-hover:text-[#563478] transition-colors"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 011.06.02L10 11.293l3.71-4.06a.75.75 0 111.1 1.02l-4.25 4.656a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+
+                {showProfileMenu && (
+                  <div
+                    className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-20"
+                    role="menu"
+                    aria-orientation="vertical"
+                    aria-label="User menu"
+                  >
+                    <Link
+                      href="/settings"
+                      role="menuitem"
+                      className="block px-4 py-2 text-sm text-[#563478]/70 hover:text-[#563478] hover:bg-purple-50 transition-colors"
+                      onClick={() => setShowProfileMenu(false)}
+                    >
+                      Settings
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        handleSignOut();
+                      }}
+                      role="menuitem"
+                      className="w-full text-left px-4 py-2 text-sm text-[#563478]/70 hover:text-[#563478] hover:bg-purple-50 transition-colors cursor-pointer"
+                      type="button"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               // Unauthenticated state - show sign in and get started
               <>
