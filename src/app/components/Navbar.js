@@ -3,10 +3,11 @@ import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import ProfilePicture from "./ProfilePicture";
 
 function Navbar({ variant = "default" }) {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, signOut } = useAuth();
+  const { isAuthenticated, isLoading, signOut } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const menuRef = useRef(null);
 
@@ -118,17 +119,7 @@ function Navbar({ variant = "default" }) {
                   aria-haspopup="true"
                   type="button"
                 >
-                  {user && (user.attributes?.picture || user.picture) ? (
-                    <img
-                      src={user.attributes?.picture || user.picture}
-                      alt="Profile"
-                      className="h-8 w-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium text-gray-700">
-                      {((user && (user.attributes?.name || user.name)) || "U").charAt(0)}
-                    </div>
-                  )}
+                  <ProfilePicture size="sm" />
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     className="h-4 w-4 text-gray-600 group-hover:text-[#563478] transition-colors"
