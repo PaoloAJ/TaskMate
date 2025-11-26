@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar";
 import { generateClient } from "aws-amplify/data";
 import { useAuth } from "@/lib/auth-context";
 
+
 const client = generateClient({
   authMode: "userPool",
 });
@@ -35,7 +36,8 @@ export default function Page() {
         });
       console.log("Fetched users:", newUsers);
       console.log("Next token:", newNextToken);
-      setUsers((prevUsers) => [...prevUsers, ...newUsers]);
+      const visible = (newUsers || []).filter((u) => !u?.buddy_id);
+      setUsers((prevUsers) => [...prevUsers, ...visible]);
       setNextToken(newNextToken);
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -54,33 +56,91 @@ export default function Page() {
     }
   }, [user?.userId]);
 
-  const placeholders = [
-    // replace placeholders with useres
-    {
-      id: 1,
-      username: "Alvin Cabe",
-      school: "UF",
-      interests: ["Music", "Food", "Travel"],
-      bio: "I love exploring new places and trying different foods. Coffee, good music, and long walks keep me sane.",
-    },
-    {
-      id: 2,
-      username: "Jamie Roe",
-      school: "FSU",
-      interests: ["Coding", "Gaming", "Photography"],
-      bio: "Product designer and amateur photographer. I enjoy solving problems and documenting the world through a lens.",
-    },
-    {
-      id: 3,
-      username: "Taylor Smith",
-      school: "USF",
-      interests: ["Fitness", "Reading", "Nature"],
-      bio: "Runner, reader, and outdoor enthusiast. I like long bios that tell a story about curiosity and persistence.",
-    },
-  ];
-
   const [selected, setSelected] = useState(null);
   const [tab, setTab] = useState("received");
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const hasLoadedRequestsRef = useRef(false);
+
+  // Helper function to compare arrays as sets (extracted to avoid recreation)
+  const arraysEqualAsSets = (a = [], b = []) => {
+    if (a.length !== b.length) return false;
+    const sa = new Set(a);
+    for (const v of b) if (!sa.has(v)) return false;
+    return true;
+  };
+
+ // Load the current user's sent/received IDs from the DB, fetch each profile,
+ // then store minimal profile objects for UI display.
+ const loadUserRequests = async () => {
+   if (!user?.userId) return;
+   try {
+     const res = await client.models.UserProfile.get({ id: user.userId });
+     const profile = res.data;
+     if (!profile) return;
+
+     const sentIds = profile.sent || [];
+     const reqIds = profile.request || [];
+
+     const fetchProfilesByIds = async (ids) => {
+      if (!ids || ids.length === 0) return {profiles: [], keptIds: []};
+      const results = await Promise.allSettled(
+        ids.map((id) => client.models.UserProfile.get({ id }))
+      );
+      const profiles = results
+       .filter((r) => r.status === "fulfilled" && r.value?.data)
+       .map((r) => r.value.data)
+       .filter((p) => !p?.buddy_id)
+       .map((p) => ({ id: p.id, username: p.username, school: p.school }));
+      const keptIds = results
+       .filter((r) => r.status === "fulfilled" && r.value?.data && !r.value.data?.buddy_id)
+       .map((r) => r.value.data.id);
+      return { profiles, keptIds};
+     };
+
+     const [sentResult, receivedResult] = await Promise.all([
+       fetchProfilesByIds(sentIds),
+       fetchProfilesByIds(reqIds),
+     ]);
+
+     // Only update state if data actually changed (optimization)
+     setSentRequests((prev) => {
+       const prevIds = prev.map(p => p.id).sort();
+       const newIds = sentResult.profiles.map(p => p.id).sort();
+       if (arraysEqualAsSets(prevIds, newIds)) return prev;
+       return sentResult.profiles;
+     });
+
+     setReceivedRequests((prev) => {
+       const prevIds = prev.map(p => p.id).sort();
+       const newIds = receivedResult.profiles.map(p => p.id).sort();
+       if (arraysEqualAsSets(prevIds, newIds)) return prev;
+       return receivedResult.profiles;
+     });
+
+     //cleans the database for ids that are not filtered out properly
+     if (!arraysEqualAsSets(sentIds, sentResult.keptIds) || !arraysEqualAsSets(reqIds, receivedResult.keptIds)) {
+       try {
+         await client.models.UserProfile.update({
+           id: user.userId,
+           sent: sentResult.keptIds,
+           request: receivedResult.keptIds,
+         });
+       } catch (e) {
+         console.error("Failed to persist cleaned request IDs:", e);
+       }
+     }
+
+     //refresh the user list for the left side
+     //updates during every button click, takes a while to load, but is technically optimal
+    //  setUsers([]);
+    //  setNextToken(null);
+    //  await fetchUsers(null, user.userId);
+
+   } catch (err) {
+     console.error("Error loading requests:", err);
+   }
+ };
 
   // Auto-select first user when users are loaded
   useEffect(() => {
@@ -89,20 +149,206 @@ export default function Page() {
     }
   }, [users, selected]);
 
+  //load requests / sent on mount
+  //if loaduserrequest on every click, then needs to be commented out so no double users
+  useEffect(() => {
+    if (user?.userId && !hasLoadedRequestsRef.current) {
+      hasLoadedRequestsRef.current = true;
+      loadUserRequests();
+    }
+  }, [user?.userId])
+
   // Placeholder pending requests
-  const [sentRequests, setSentRequests] = useState([
-    { id: 1, username: "carla", school: "Eastside Univ" },
-  ]);
-  const [receivedRequests, setReceivedRequests] = useState([
-    { id: 2, username: "dan", school: "North Tech" },
-    { id: 3, username: "eva", school: "South Arts" },
-  ]);
+  const [sentRequests, setSentRequests] = useState([]);
+  const [receivedRequests, setReceivedRequests] = useState([]);
 
-  const acceptRequest = (id) => {};
+  const sendRequest = async (selectedUser) => {
+    const selectedUserId = selectedUser.id;
+    if (!user?.userId || !selectedUserId) {
+      throw new Error("User ID or selected user ID is missing");
+    }
 
-  const rejectRequest = (id) => {};
+    if (actionLoading) return; // Prevent concurrent operations
+    setActionLoading(true);
 
-  const cancelRequest = (id) => {};
+    try {
+      // Fetch both user profiles
+      const [currentUserProfile, selectedUserProfile] = await Promise.all([
+        client.models.UserProfile.get({ id: user.userId }),
+        client.models.UserProfile.get({ id: selectedUserId }),
+      ]);
+
+      if (!currentUserProfile.data || !selectedUserProfile.data) {
+        throw new Error("Failed to fetch user profiles");
+      }
+
+      //Edge case for if someone has a buddy already
+      if (currentUserProfile.data.buddy_id) {
+        throw new Error("You already have a buddy and cannot send requests");
+      }
+      if (selectedUserProfile.data.buddy_id) {
+        throw new Error("This user already has a buddy and cannot receive requests");
+      }
+
+      // Get existing arrays or initialize as empty arrays
+      const currentUserSent = currentUserProfile.data.sent || [];
+      const selectedUserRequest = selectedUserProfile.data.request || [];
+
+      // Check if request already exists to avoid duplicates
+      if (currentUserSent.includes(selectedUserId)) {
+        throw new Error("Request already sent to this user");
+      }
+
+      if (selectedUserRequest.includes(user.userId)) {
+        throw new Error("Request already exists");
+      }
+
+      // Append IDs to respective arrays
+      const updatedCurrentUserSent = [...currentUserSent, selectedUserId];
+      const updatedSelectedUserRequest = [...selectedUserRequest, user.userId];
+
+      // Update both profiles in parallel
+      await Promise.all([
+        client.models.UserProfile.update({
+          id: user.userId,
+          sent: updatedCurrentUserSent,
+        }),
+        client.models.UserProfile.update({
+          id: selectedUserId,
+          request: updatedSelectedUserRequest,
+        }),
+      ]);
+
+      setSentRequests((prev) => {
+        const profile = selectedUserProfile.data || {};
+        if (!profile.id) return prev;
+
+        if (prev.some((p) => p.id === profile.id)) return prev;
+        return [
+          ...prev,
+          {id: profile.id, username: profile.username, school: profile.school},
+        ];
+      })
+
+      await loadUserRequests();
+
+      return true;
+    } catch (error) {
+      console.error("Error sending request:", error);
+      throw error;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const acceptRequest = async (id) => {
+    const selectedUserId = id;
+    if (actionLoading) return; // Prevent concurrent operations
+    setActionLoading(true);
+
+    try {
+      // same logic as sending Requests
+      const [currentUserProfile, selectedUserProfile] = await Promise.all([
+        client.models.UserProfile.get({ id: user.userId }),
+        client.models.UserProfile.get({ id: selectedUserId }),
+      ]);
+
+      if (!currentUserProfile.data || !selectedUserProfile.data) {
+        throw new Error("Failed to fetch user profiles");
+      }
+
+      await Promise.all([
+        client.models.UserProfile.update({id: user.userId, buddy_id: selectedUserId, request: [], sent: []}),
+        client.models.UserProfile.update({id: selectedUserId, buddy_id: user.userId, request: [], sent: []}),
+      ]);
+
+      setSentRequests([]);
+      setReceivedRequests([]);
+
+      await loadUserRequests(); 
+    } catch (err) {
+      console.error("Error accepting request:", err);
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const rejectRequest = async (id) => {
+    const selectedUserId = id;
+    if (actionLoading) return; // Prevent concurrent operations
+    setActionLoading(true);
+
+    try {
+      // same logic as sending Requests
+      const [currentUserProfile, selectedUserProfile] = await Promise.all([
+        client.models.UserProfile.get({ id: user.userId }),
+        client.models.UserProfile.get({ id: selectedUserId }),
+      ]);
+
+      if (!currentUserProfile.data || !selectedUserProfile.data) {
+        throw new Error("Failed to fetch user profiles");
+      }
+
+      const currentUserRequest = currentUserProfile.data.request || [];
+      const selectedUserSent = selectedUserProfile.data.sent || [];
+      
+      const updCurrentRequest = currentUserRequest.filter((uid) => uid !== selectedUserId);
+      const updSelectedSent = selectedUserSent.filter((uid) => uid !== user.userId);
+
+      await Promise.all([
+        client.models.UserProfile.update({id: user.userId, request: updCurrentRequest}),
+        client.models.UserProfile.update({id: selectedUserId, sent: updSelectedSent}),
+      ]);
+
+      setReceivedRequests((prev) => prev.filter((p) => p.id !== selectedUserId));
+
+      await loadUserRequests(); 
+    } catch (err) {
+      console.error("Error rejecting request:", err);
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const cancelRequest = async (id) => {
+    const selectedUserId = id;
+    if (actionLoading) return; // Prevent concurrent operations
+    setActionLoading(true);
+
+    try {
+      // same logic as sending Requests
+      const [currentUserProfile, selectedUserProfile] = await Promise.all([
+        client.models.UserProfile.get({ id: user.userId }),
+        client.models.UserProfile.get({ id: selectedUserId }),
+      ]);
+
+      if (!currentUserProfile.data || !selectedUserProfile.data) {
+        throw new Error("Failed to fetch user profiles");
+      }
+
+      const currentUserSent = currentUserProfile.data.sent || [];
+      const selectedUserRequest = selectedUserProfile.data.request || [];
+      
+      const updCurrentSent = currentUserSent.filter((uid) => uid !== selectedUserId);
+      const updSelectedRequest = selectedUserRequest.filter((uid) => uid !== user.userId);
+
+      await Promise.all([
+        client.models.UserProfile.update({id: user.userId, sent: updCurrentSent}),
+        client.models.UserProfile.update({id: selectedUserId, request: updSelectedRequest}),
+      ]);
+
+      setSentRequests((prev) => prev.filter((p) => p.id !== selectedUserId));
+
+      await loadUserRequests(); //optional
+    } catch (err) {
+      console.error("Error canceling request:", err);
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -198,21 +444,28 @@ export default function Page() {
                     </div>
                   </div>
 
-                  <div className="mt-6">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window !== "undefined") {
-                          window.alert(
-                            `Buddy request sent to ${selected.username}`
-                          );
-                        }
-                      }}
-                      className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition"
-                    >
-                      Request Buddy
-                    </button>
-                  </div>
+                    <div className="mt-6">
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={async () => {
+                          try {
+                            await sendRequest(selected);
+                            if (typeof window !== "undefined") {
+                              window.alert(`Buddy request sent to ${selected.username}`);
+                            }
+                          } catch (err) {
+                            console.error("Failed to send buddy request:", err);
+                            if (typeof window !== "undefined") {
+                              window.alert(`Failed to send request: ${err.message}`);
+                            }
+                          }
+                        }}
+                        className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {actionLoading ? "Sending..." : "Request Buddy"}
+                      </button>
+                    </div>
                 </>
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500">
@@ -263,14 +516,35 @@ export default function Page() {
                               </div>
                               <div className="flex gap-2">
                                 <button
-                                  onClick={() => acceptRequest(r.id)}
-                                  className="px-3 py-1 bg-green-600 text-white rounded"
+                                  onClick={async () => {
+                                    try {
+                                      await acceptRequest(r.id);
+                                      if (typeof window !== "undefined") {
+                                        window.alert(`Buddy request accepted!`);
+                                      }
+                                    } catch (err) {
+                                      if (typeof window !== "undefined") {
+                                        window.alert(`Failed to accept request: ${err.message}`);
+                                      }
+                                    }
+                                  }}
+                                  disabled={actionLoading}
+                                  className="px-3 py-1 bg-green-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   Accept
                                 </button>
                                 <button
-                                  onClick={() => rejectRequest(r.id)}
-                                  className="px-3 py-1 bg-red-500 text-white rounded"
+                                  onClick={async () => {
+                                    try {
+                                      await rejectRequest(r.id);
+                                    } catch (err) {
+                                      if (typeof window !== "undefined") {
+                                        window.alert(`Failed to reject request: ${err.message}`);
+                                      }
+                                    }
+                                  }}
+                                  disabled={actionLoading}
+                                  className="px-3 py-1 bg-red-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   Reject
                                 </button>
@@ -299,8 +573,17 @@ export default function Page() {
                               </div>
                               <div>
                                 <button
-                                  onClick={() => cancelRequest(s.id)}
-                                  className="px-3 py-1 bg-red-500 text-white rounded"
+                                  onClick={async () => {
+                                    try {
+                                      await cancelRequest(s.id);
+                                    } catch (err) {
+                                      if (typeof window !== "undefined") {
+                                        window.alert(`Failed to cancel request: ${err.message}`);
+                                      }
+                                    }
+                                  }}
+                                  disabled={actionLoading}
+                                  className="px-3 py-1 bg-red-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   Cancel
                                 </button>

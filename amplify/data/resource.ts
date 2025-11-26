@@ -15,7 +15,9 @@ const schema = a.schema({
       interests: a.string().array(),
       school: a.string().required(),
       pfp_key: a.string(),
-      buddy_id: a.id(),
+      request: a.string().array(),
+      sent: a.string().array(),
+      buddy_id: a.string(),
     })
     .authorization((allow) => [allow.authenticated()]),
 
