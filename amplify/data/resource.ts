@@ -17,6 +17,7 @@ const schema = a.schema({
       pfp_key: a.string(),
       request: a.string().array(),
       sent: a.string().array(),
+      buddy_id: a.string(),
     })
     .authorization((allow) => [allow.authenticated()]),
 

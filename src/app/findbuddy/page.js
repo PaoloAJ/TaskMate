@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Navbar from "../components/Navbar";
 import { generateClient } from "aws-amplify/data";
 import { useAuth } from "@/lib/auth-context";
-import { Bai_Jamjuree } from "next/font/google";
+
 
 const client = generateClient({
   authMode: "userPool",
@@ -36,7 +36,8 @@ export default function Page() {
         });
       console.log("Fetched users:", newUsers);
       console.log("Next token:", newNextToken);
-      setUsers((prevUsers) => [...prevUsers, ...newUsers]);
+      const visible = (newUsers || []).filter((u) => !u?.buddy_id);
+      setUsers((prevUsers) => [...prevUsers, ...visible]);
       setNextToken(newNextToken);
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -73,28 +74,59 @@ export default function Page() {
      const reqIds = profile.request || [];
 
      const fetchProfilesByIds = async (ids) => {
-       if (!ids || ids.length === 0) return [];
-       const results = await Promise.all(
-         ids.map((id) => client.models.UserProfile.get({ id }))
-       );
-       return results
-         .map((r) => r.data)
-         .filter(Boolean)
-         .map((p) => ({ id: p.id, username: p.username, school: p.school }));
+      if (!ids || ids.length === 0) return {profiles: [], keptIds: []};
+      const results = await Promise.allSettled(
+        ids.map((id) => client.models.UserProfile.get({ id }))
+      );
+      const profiles = results
+       .filter((r) => r.status === "fulfilled" && r.value?.data)
+       .map((r) => r.value.data)
+       .filter((p) => !p?.buddy_id)
+       .map((p) => ({ id: p.id, username: p.username, school: p.school }));
+      const keptIds = results
+       .filter((r) => r.status === "fulfilled" && r.value?.data && !r.value.data?.buddy_id)
+       .map((r) => r.value.data.id);
+      return { profiles, keptIds};
      };
 
-     const [sentProfiles, receivedProfiles] = await Promise.all([
+     const [sentResult, receivedResult] = await Promise.all([
        fetchProfilesByIds(sentIds),
        fetchProfilesByIds(reqIds),
      ]);
 
-     setSentRequests(sentProfiles);
-     setReceivedRequests(receivedProfiles);
+     setSentRequests(sentResult.profiles);
+     setReceivedRequests(receivedResult.profiles);
+
+     const arraysEqualAsSets = (a = [], b = []) => {
+       if (a.length !== b.length) return false;
+       const sa = new Set(a);
+       for (const v of b) if (!sa.has(v)) return false;
+       return true;
+     };
+
+     //cleans the database for ids that are not filtered out properly
+     if (!arraysEqualAsSets(sentIds, sentResult.keptIds) || !arraysEqualAsSets(reqIds, receivedResult.keptIds)) {
+       try {
+         await client.models.UserProfile.update({
+           id: user.userId,
+           sent: sentResult.keptIds,
+           request: receivedResult.keptIds,
+         });
+       } catch (e) {
+         console.error("Failed to persist cleaned request IDs:", e);
+       }
+     }
+
+     //refresh the user list for the left side
+     //updates during every button click, takes a while to load, but is technically optimal
+    //  setUsers([]);
+    //  setNextToken(null);
+    //  await fetchUsers(null, user.userId);
+
    } catch (err) {
      console.error("Error loading requests:", err);
    }
  };
-
 
   // Auto-select first user when users are loaded
   useEffect(() => {
@@ -104,7 +136,7 @@ export default function Page() {
   }, [users, selected]);
 
   //load requests / sent on mount
-
+  //if loaduserrequest on every click, then needs to be commented out so no double users
   useEffect(() => {
     if (user?.userId && !hasLoadedRequestsRef.current) {
       hasLoadedRequestsRef.current = true;
@@ -113,13 +145,8 @@ export default function Page() {
   })
 
   // Placeholder pending requests
-  const [sentRequests, setSentRequests] = useState([
-    // { id: 1, username: "carla", school: "Eastside Univ" },
-  ]);
-  const [receivedRequests, setReceivedRequests] = useState([
-    // { id: 2, username: "dan", school: "North Tech" },
-    // { id: 3, username: "eva", school: "South Arts" },
-  ]);
+  const [sentRequests, setSentRequests] = useState([]);
+  const [receivedRequests, setReceivedRequests] = useState([]);
 
   const sendRequest = async (selectedUser) => {
     const selectedUserId = selectedUser.id;
@@ -136,6 +163,14 @@ export default function Page() {
 
       if (!currentUserProfile.data || !selectedUserProfile.data) {
         throw new Error("Failed to fetch user profiles");
+      }
+
+      //Edge case for if someone has a buddy already
+      if (currentUserProfile.data.buddy_id) {
+        throw new Error("You already have a buddy and cannot send requests");
+      }
+      if (selectedUserProfile.data.buddy_id) {
+        throw new Error("This user already has a buddy and cannot receive requests");
       }
 
       // Get existing arrays or initialize as empty arrays
@@ -178,6 +213,8 @@ export default function Page() {
         ];
       })
 
+      await loadUserRequests();
+
       return true;
     } catch (error) {
       console.error("Error sending request:", error);
@@ -185,11 +222,99 @@ export default function Page() {
     }
   };
 
-  const acceptRequest = (id) => {};
+  const acceptRequest = async (id) => {
+    const selectedUserId = id;
+    try {
+      // same logic as sending Requests
+      const [currentUserProfile, selectedUserProfile] = await Promise.all([
+        client.models.UserProfile.get({ id: user.userId }),
+        client.models.UserProfile.get({ id: selectedUserId }),
+      ]);
 
-  const rejectRequest = (id) => {};
+      if (!currentUserProfile.data || !selectedUserProfile.data) {
+        throw new Error("Failed to fetch user profiles");
+      }
 
-  const cancelRequest = (id) => {};
+      await Promise.all([
+        client.models.UserProfile.update({id: user.userId, buddy_id: selectedUserId, request: [], sent: []}),
+        client.models.UserProfile.update({id: selectedUserId, buddy_id: user.userId, request: [], sent: []}),
+      ]);
+
+      setSentRequests([]);
+      setReceivedRequests([]);
+
+      await loadUserRequests(); 
+    } catch (err) {
+      console.log(err);
+      throw err;
+    }
+  };
+
+  const rejectRequest = async (id) => {
+    const selectedUserId = id;
+    try {
+      // same logic as sending Requests
+      const [currentUserProfile, selectedUserProfile] = await Promise.all([
+        client.models.UserProfile.get({ id: user.userId }),
+        client.models.UserProfile.get({ id: selectedUserId }),
+      ]);
+
+      if (!currentUserProfile.data || !selectedUserProfile.data) {
+        throw new Error("Failed to fetch user profiles");
+      }
+
+      const currentUserRequest = currentUserProfile.data.request;
+      const selectedUserSent = selectedUserProfile.data.sent;
+      
+      const updCurrentRequest = currentUserRequest.filter((uid) => uid !== selectedUserId);
+      const updSelectedSent = selectedUserSent.filter((uid) => uid !== user.userId);
+
+      await Promise.all([
+        client.models.UserProfile.update({id: user.userId, request: updCurrentRequest}),
+        client.models.UserProfile.update({id: selectedUserId, sent: updSelectedSent}),
+      ]);
+
+      setReceivedRequests((prev) => prev.filter((p) => p.id !== selectedUserId));
+
+      await loadUserRequests(); 
+    } catch (err) {
+      console.log(err);
+      throw err;
+    }
+  };
+
+  const cancelRequest = async (id) => {
+    const selectedUserId = id;
+    try {
+      // same logic as sending Requests
+      const [currentUserProfile, selectedUserProfile] = await Promise.all([
+        client.models.UserProfile.get({ id: user.userId }),
+        client.models.UserProfile.get({ id: selectedUserId }),
+      ]);
+
+      if (!currentUserProfile.data || !selectedUserProfile.data) {
+        throw new Error("Failed to fetch user profiles");
+      }
+
+      const currentUserSent = currentUserProfile.data.sent;
+      const selectedUserRequest = selectedUserProfile.data.request;
+      
+      const updCurrentSent = currentUserSent.filter((uid) => uid !== selectedUserId);
+      const updSelectedRequest = selectedUserRequest.filter((uid) => uid !== user.userId);
+
+      await Promise.all([
+        client.models.UserProfile.update({id: user.userId, sent: updCurrentSent}),
+        client.models.UserProfile.update({id: selectedUserId, request: updSelectedRequest}),
+      ]);
+
+      setSentRequests((prev) => prev.filter((p) => p.id !== selectedUserId));
+
+      await loadUserRequests(); //optional
+    } catch (err) {
+      console.log(err);
+      throw err;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
