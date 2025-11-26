@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Navbar from "../components/Navbar";
 import { generateClient } from "aws-amplify/data";
 import { useAuth } from "@/lib/auth-context";
+import { Bai_Jamjuree } from "next/font/google";
 
 const client = generateClient({
   authMode: "userPool",
@@ -54,33 +55,46 @@ export default function Page() {
     }
   }, [user?.userId]);
 
-  const placeholders = [
-    // replace placeholders with useres
-    {
-      id: 1,
-      username: "Alvin Cabe",
-      school: "UF",
-      interests: ["Music", "Food", "Travel"],
-      bio: "I love exploring new places and trying different foods. Coffee, good music, and long walks keep me sane.",
-    },
-    {
-      id: 2,
-      username: "Jamie Roe",
-      school: "FSU",
-      interests: ["Coding", "Gaming", "Photography"],
-      bio: "Product designer and amateur photographer. I enjoy solving problems and documenting the world through a lens.",
-    },
-    {
-      id: 3,
-      username: "Taylor Smith",
-      school: "USF",
-      interests: ["Fitness", "Reading", "Nature"],
-      bio: "Runner, reader, and outdoor enthusiast. I like long bios that tell a story about curiosity and persistence.",
-    },
-  ];
-
   const [selected, setSelected] = useState(null);
   const [tab, setTab] = useState("received");
+
+  const hasLoadedRequestsRef = useRef(false);
+
+ // Load the current user's sent/received IDs from the DB, fetch each profile,
+ // then store minimal profile objects for UI display.
+ const loadUserRequests = async () => {
+   if (!user?.userId) return;
+   try {
+     const res = await client.models.UserProfile.get({ id: user.userId });
+     const profile = res.data;
+     if (!profile) return;
+
+     const sentIds = profile.sent || [];
+     const reqIds = profile.request || [];
+
+     const fetchProfilesByIds = async (ids) => {
+       if (!ids || ids.length === 0) return [];
+       const results = await Promise.all(
+         ids.map((id) => client.models.UserProfile.get({ id }))
+       );
+       return results
+         .map((r) => r.data)
+         .filter(Boolean)
+         .map((p) => ({ id: p.id, username: p.username, school: p.school }));
+     };
+
+     const [sentProfiles, receivedProfiles] = await Promise.all([
+       fetchProfilesByIds(sentIds),
+       fetchProfilesByIds(reqIds),
+     ]);
+
+     setSentRequests(sentProfiles);
+     setReceivedRequests(receivedProfiles);
+   } catch (err) {
+     console.error("Error loading requests:", err);
+   }
+ };
+
 
   // Auto-select first user when users are loaded
   useEffect(() => {
@@ -89,14 +103,87 @@ export default function Page() {
     }
   }, [users, selected]);
 
+  //load requests / sent on mount
+
+  useEffect(() => {
+    if (user?.userId && !hasLoadedRequestsRef.current) {
+      hasLoadedRequestsRef.current = true;
+      loadUserRequests();
+    }
+  })
+
   // Placeholder pending requests
   const [sentRequests, setSentRequests] = useState([
-    { id: 1, username: "carla", school: "Eastside Univ" },
+    // { id: 1, username: "carla", school: "Eastside Univ" },
   ]);
   const [receivedRequests, setReceivedRequests] = useState([
-    { id: 2, username: "dan", school: "North Tech" },
-    { id: 3, username: "eva", school: "South Arts" },
+    // { id: 2, username: "dan", school: "North Tech" },
+    // { id: 3, username: "eva", school: "South Arts" },
   ]);
+
+  const sendRequest = async (selectedUser) => {
+    const selectedUserId = selectedUser.id;
+    if (!user?.userId || !selectedUserId) {
+      throw new Error("User ID or selected user ID is missing");
+    }
+
+    try {
+      // Fetch both user profiles
+      const [currentUserProfile, selectedUserProfile] = await Promise.all([
+        client.models.UserProfile.get({ id: user.userId }),
+        client.models.UserProfile.get({ id: selectedUserId }),
+      ]);
+
+      if (!currentUserProfile.data || !selectedUserProfile.data) {
+        throw new Error("Failed to fetch user profiles");
+      }
+
+      // Get existing arrays or initialize as empty arrays
+      const currentUserSent = currentUserProfile.data.sent || [];
+      const selectedUserRequest = selectedUserProfile.data.request || [];
+
+      // Check if request already exists to avoid duplicates
+      if (currentUserSent.includes(selectedUserId)) {
+        throw new Error("Request already sent to this user");
+      }
+
+      if (selectedUserRequest.includes(user.userId)) {
+        throw new Error("Request already exists");
+      }
+
+      // Append IDs to respective arrays
+      const updatedCurrentUserSent = [...currentUserSent, selectedUserId];
+      const updatedSelectedUserRequest = [...selectedUserRequest, user.userId];
+
+      // Update both profiles in parallel
+      await Promise.all([
+        client.models.UserProfile.update({
+          id: user.userId,
+          sent: updatedCurrentUserSent,
+        }),
+        client.models.UserProfile.update({
+          id: selectedUserId,
+          request: updatedSelectedUserRequest,
+        }),
+      ]);
+
+      setSentRequests((prev) => {
+        const profile = selectedUserProfile.data || {};
+        if (!profile.id) return prev;
+
+        if (prev.some((p) => p.id === profile.id)) return prev;
+        return [
+          ...prev,
+          {id: profile.id, username: profile.username, school: profile.school},
+        ];
+      })
+
+      return true;
+    } catch (error) {
+      console.error("Error sending request:", error);
+      throw error;
+    }
+  };
 
   const acceptRequest = (id) => {};
 
@@ -198,21 +285,27 @@ export default function Page() {
                     </div>
                   </div>
 
-                  <div className="mt-6">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window !== "undefined") {
-                          window.alert(
-                            `Buddy request sent to ${selected.username}`
-                          );
-                        }
-                      }}
-                      className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition"
-                    >
-                      Request Buddy
-                    </button>
-                  </div>
+                    <div className="mt-6">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await sendRequest(selected);
+                            if (typeof window !== "undefined") {
+                              window.alert(`Buddy request sent to ${selected.username}`);
+                            }
+                          } catch (err) {
+                            console.error("Failed to send buddy request:", err);
+                            if (typeof window !== "undefined") {
+                              window.alert(`Failed to send request: ${err.message}`);
+                            }
+                          }
+                        }}
+                        className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition"
+                      >
+                        Request Buddy
+                      </button>
+                    </div>
                 </>
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500">

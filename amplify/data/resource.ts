@@ -15,6 +15,8 @@ const schema = a.schema({
       interests: a.string().array(),
       school: a.string().required(),
       pfp_key: a.string(),
+      request: a.string().array(),
+      sent: a.string().array(),
     })
     .authorization((allow) => [allow.authenticated()]),
 
