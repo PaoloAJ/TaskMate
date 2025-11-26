@@ -1,5 +1,5 @@
 import { fetchAuthSession } from "aws-amplify/auth/server";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { runWithAmplifyServerContext } from "@/utils/amplifyServerUtils";
 import outputs from "../amplify_outputs.json";
 
@@ -9,10 +9,11 @@ export async function middleware(request) {
 
   const publicRoutes = ["/", "/signin", "/signup", "/verify"];
   const isPublicRoute = publicRoutes.includes(pathname);
-  // All the other routes after profile setup
-  const protectedRoutes = ["/home", "/findbuddy", "/leaderboard"];
-  const isProtectedRoute = protectedRoutes.includes(pathname);
   const setupProfileRoute = "/setup-profile";
+  const findBuddyRoute = "/findbuddy";
+  // Routes that require both profile AND buddy
+  const fullyProtectedRoutes = ["/home", "/leaderboard", "/settings"];
+  const isFullyProtectedRoute = fullyProtectedRoutes.includes(pathname);
 
   // Check authentication
   const authenticated = await runWithAmplifyServerContext({
@@ -35,7 +36,7 @@ export async function middleware(request) {
     },
   });
 
-  const hasProfile = await runWithAmplifyServerContext({
+  const { hasProfile, hasBuddy } = await runWithAmplifyServerContext({
     nextServerContext: { request, response },
     operation: async (contextSpec) => {
       try {
@@ -44,7 +45,7 @@ export async function middleware(request) {
         const token = session.tokens?.accessToken?.toString();
 
         if (!userId || !token) {
-          return false;
+          return { hasProfile: false, hasBuddy: false };
         }
 
         // Direct AppSync API call
@@ -52,6 +53,7 @@ export async function middleware(request) {
           query GetUserProfile($id: ID!) {
             getUserProfile(id: $id) {
               id
+              buddy_id
             }
           }
         `;
@@ -69,13 +71,17 @@ export async function middleware(request) {
         });
 
         const result = await apiResponse.json();
-        return result.data?.getUserProfile !== null;
+        const profile = result.data?.getUserProfile;
+        return {
+          hasProfile: profile !== null,
+          hasBuddy: profile?.buddy_id !== null && profile?.buddy_id !== undefined,
+        };
       } catch (error) {
         // Suppress "no federated jwt" errors for unauthenticated users
         if (error.message && !error.message.includes("No federated jwt")) {
           console.log("Profile check error:", error);
         }
-        return false;
+        return { hasProfile: false, hasBuddy: false };
       }
     },
   });
@@ -85,45 +91,76 @@ export async function middleware(request) {
   console.log(`[Middleware] Authenticated: ${authenticated}`);
   console.log(`[Middleware] Is Public Route: ${isPublicRoute}`);
   console.log(`[Middleware] Has Profile: ${hasProfile}`);
+  console.log(`[Middleware] Has Buddy: ${hasBuddy}`);
 
   // PUBLIC ROUTES LOGIC
   if (isPublicRoute) {
-    // If user is authenticated and trying to access public routes, redirect to dashboard
+    // If user is authenticated and trying to access public routes, redirect based on their state
     // Allow the root landing page to remain accessible even when authenticated.
-    // Redirect authenticated users away from other public routes (signin/signup/verify)
     if (authenticated && pathname !== "/") {
-      return NextResponse.redirect(new URL("/home", request.url));
+      // Determine where to redirect based on user's completion state
+      if (!hasProfile) {
+        return NextResponse.redirect(new URL("/setup-profile", request.url));
+      } else if (!hasBuddy) {
+        return NextResponse.redirect(new URL("/findbuddy", request.url));
+      } else {
+        return NextResponse.redirect(new URL("/home", request.url));
+      }
     }
     // If user is NOT authenticated, let them access public routes
     return response;
   }
 
+  // SETUP PROFILE ROUTE
   if (pathname === setupProfileRoute) {
+    if (!authenticated) {
+      return NextResponse.redirect(new URL("/signin", request.url));
+    }
     if (!hasProfile) {
-      return response;
+      return response; // Allow access to setup profile
     } else {
-      const homeUrl = new URL("/findbuddy", request.url);
-      return NextResponse.redirect(homeUrl);
+      // Profile exists, move to next step (findbuddy)
+      return NextResponse.redirect(new URL("/findbuddy", request.url));
     }
   }
 
-  // PROTECTED ROUTES LOGIC (everything else)
+  // FINDBUDDY ROUTE
+  if (pathname === findBuddyRoute) {
+    if (!authenticated) {
+      return NextResponse.redirect(new URL("/signin", request.url));
+    }
+    if (!hasProfile) {
+      // Need to complete profile first
+      return NextResponse.redirect(new URL("/setup-profile", request.url));
+    }
+    if (hasBuddy) {
+      // Already has a buddy, redirect to home
+      return NextResponse.redirect(new URL("/home", request.url));
+    }
+    // User has profile but no buddy - allow access to findbuddy
+    return response;
+  }
+
+  // FULLY PROTECTED ROUTES (require authentication + profile + buddy)
   if (!authenticated) {
     // If user is NOT authenticated, redirect to signin
     const signInUrl = new URL("/signin", request.url);
-    signInUrl.searchParams.set("redirect", pathname); // Remember where they wanted to go
+    signInUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(signInUrl);
   }
 
-  if (isProtectedRoute) {
+  if (isFullyProtectedRoute) {
     if (!hasProfile) {
-      // If user is authenticated but has no profile, redirect to setup-profile
-      const setupProfileUrl = new URL("/setup-profile", request.url);
-      return NextResponse.redirect(setupProfileUrl);
+      // Need to complete profile first
+      return NextResponse.redirect(new URL("/setup-profile", request.url));
+    }
+    if (!hasBuddy) {
+      // Need to find a buddy first
+      return NextResponse.redirect(new URL("/findbuddy", request.url));
     }
   }
 
-  // User is authenticated and accessing protected route - allow
+  // User is authenticated and has completed all required steps - allow
   return response;
 }
 
