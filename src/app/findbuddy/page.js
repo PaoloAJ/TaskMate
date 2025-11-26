@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Navbar from "../components/Navbar";
+import ProfilePicture from "../components/ProfilePicture";
 import { generateClient } from "aws-amplify/data";
 import { useAuth } from "@/lib/auth-context";
 
@@ -15,10 +16,12 @@ export default function Page() {
 
   const [users, setUsers] = useState([]);
   const [nextToken, setNextToken] = useState(null);
+  const [previousTokens, setPreviousTokens] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const hasFetchedRef = useRef(false);
 
-  const fetchUsers = async (currentToken = null, idToFilter = null) => {
+  const fetchUsers = async (currentToken = null, idToFilter = null, isNextPage = false) => {
     if (!idToFilter) {
       console.log("No user ID to filter by");
       return;
@@ -28,7 +31,7 @@ export default function Page() {
     try {
       const { data: newUsers, nextToken: newNextToken } =
         await client.models.UserProfile.list({
-          limit: 10,
+          limit: 6,
           nextToken: currentToken,
           filter: {
             id: { ne: idToFilter },
@@ -37,8 +40,13 @@ export default function Page() {
       console.log("Fetched users:", newUsers);
       console.log("Next token:", newNextToken);
       const visible = (newUsers || []).filter((u) => !u?.buddy_id);
-      setUsers((prevUsers) => [...prevUsers, ...visible]);
+      setUsers(visible);
       setNextToken(newNextToken);
+
+      // Track token history for pagination
+      if (isNextPage && currentToken) {
+        setPreviousTokens(prev => [...prev, currentToken]);
+      }
     } catch (error) {
       console.error("Error fetching users:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
@@ -47,12 +55,34 @@ export default function Page() {
     }
   };
 
+  const goToNextPage = () => {
+    if (nextToken && user?.userId) {
+      setCurrentPage(prev => prev + 1);
+      fetchUsers(nextToken, user.userId, true);
+      setSelected(null);
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1 && user?.userId) {
+      setCurrentPage(prev => prev - 1);
+      const newTokens = [...previousTokens];
+      newTokens.pop(); // Remove the last token
+      const prevToken = newTokens[newTokens.length - 1] || null;
+      setPreviousTokens(newTokens);
+      fetchUsers(prevToken, user.userId, false);
+      setSelected(null);
+    }
+  };
+
   useEffect(() => {
     if (user?.userId && !hasFetchedRef.current) {
       console.log("Current user ID:", user.userId);
       hasFetchedRef.current = true;
       setUsers([]); // reset users when user changes
-      fetchUsers(null, user.userId);
+      setCurrentPage(1);
+      setPreviousTokens([]);
+      fetchUsers(null, user.userId, false);
     }
   }, [user?.userId]);
 
@@ -379,9 +409,7 @@ export default function Page() {
                         selected?.id === p.id ? "ring-2 ring-purple-300" : ""
                       }`}
                     >
-                      <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center text-white font-semibold">
-                        {p.username?.charAt(0) || "?"}
-                      </div>
+                      <ProfilePicture userId={p.id} size="sm" />
 
                       <div className="text-sm text-gray-700">
                         <div className="font-medium">
@@ -397,13 +425,29 @@ export default function Page() {
                 </div>
               )}
 
-              {!loading && users.length > 0 && nextToken && (
-                <button
-                  onClick={() => fetchUsers(nextToken, user?.userId)}
-                  className="mt-4 w-full py-2 text-purple-600 hover:bg-purple-50 rounded-md transition"
-                >
-                  Load More
-                </button>
+              {/* Pagination Controls */}
+              {!loading && users.length > 0 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <button
+                    onClick={goToPreviousPage}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  >
+                    ← Previous
+                  </button>
+
+                  <span className="text-sm text-gray-600">
+                    Page {currentPage}
+                  </span>
+
+                  <button
+                    onClick={goToNextPage}
+                    disabled={!nextToken}
+                    className="px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  >
+                    Next →
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -418,11 +462,9 @@ export default function Page() {
                       {selected.username}
                     </h2>
 
-                    <div className="h-20 w-20 rounded-full bg-purple-500 flex items-center justify-center text-white text-3xl font-bold mb-4">
-                      {selected.username?.charAt(0).toUpperCase() || "?"}
-                    </div>
+                    <ProfilePicture userId={selected.id} size="xl" />
 
-                    <div className="text-sm text-gray-600 mb-4">
+                    <div className="text-sm text-gray-600 mb-4 mt-4">
                       {selected.school || "No school listed"}
                     </div>
 
