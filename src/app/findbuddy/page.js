@@ -463,7 +463,7 @@ export default function Page() {
                         }}
                         className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {actionLoading ? "Sending..." : "Request Buddy"}
+                        {actionLoading ? "..." : "Request Buddy"}
                       </button>
                     </div>
                 </>
@@ -483,13 +483,20 @@ export default function Page() {
                   <div className="flex gap-2 mb-3">
                     <button
                       className={`px-3 py-1 rounded ${tab === "received" ? "bg-purple-600 text-white" : "bg-gray-100"}`}
-                      onClick={() => setTab("received")}
+                      onClick={async () => {
+                        setTab("received");
+                        loadUserRequests();
+                      }
+                      }
                     >
                       Received
                     </button>
                     <button
                       className={`px-3 py-1 rounded ${tab === "sent" ? "bg-purple-600 text-white" : "bg-gray-100"}`}
-                      onClick={() => setTab("sent")}
+                      onClick={async () => {
+                        setTab("sent");
+                        loadUserRequests();
+                      }}
                     >
                       Sent
                     </button>
