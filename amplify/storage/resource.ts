@@ -9,5 +9,9 @@ export const storage = defineStorage({
       allow.guest.to(["read"]), // Guests can see PFPs
       allow.authenticated.to(["read", "write", "delete"]), // Users manage their own
     ],
+    // 'task-proofs/*' is a folder where users can upload task completion proofs
+    "task-proofs/{entity_id}/*": [
+      allow.authenticated.to(["read", "write", "delete"]), // Users can upload/delete their task proofs
+    ],
   }),
 });
