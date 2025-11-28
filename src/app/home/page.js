@@ -1,9 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
+import { generateClient } from "aws-amplify/data";
+import { useAuth } from "@/lib/auth-context";
+
+const client = generateClient({
+  authMode: "userPool",
+});
+
+    //acess the user's buddy
 
 export default function Page() {
+  const { user } = useAuth();
+  // Active buddy state (single object or null)
+  const [activeBuddy, setActiveBuddy] = useState(null);
+  const [isBuddyLoading, setIsBuddyLoading] = useState(false);
   // Leaderboard shows top pairs (two usernames per entry)
   const pairs = [
     { id: 1, users: ["Alex Kim", "Samira Noor"], streak: 18 },
@@ -16,11 +29,82 @@ export default function Page() {
     { id: 8, users: ["Isabella Rossi", "Mason Clark"], streak: 8 },
     { id: 9, users: ["Chloe Adams", "Benjamin Young"], streak: 6 },
     { id: 10, users: ["Sofia Lopez", "Jack Wilson"], streak: 4 },
-  ];
+  ]; 
+
+  const getBuddy = async () => {
+    if (!user?.userId) return;
+    setIsBuddyLoading(true);
+    try {
+      // fetch current user's profile to read buddy_id
+      const userRes = await client.models.UserProfile.get({ id: user.userId });
+      const userProfile = userRes?.data;
+      const buddyId = userProfile?.buddy_id;
+      if (!buddyId) {
+        setActiveBuddy(null);
+        return;
+      }
+
+      const buddyRes = await client.models.UserProfile.get({ id: buddyId });
+      const buddyProfile = buddyRes?.data || null;
+      setActiveBuddy(buddyProfile);
+    } catch (err) {
+      console.error("Failed to load buddy:", err);
+      setActiveBuddy(null);
+    } finally {
+      setIsBuddyLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    getBuddy();
+  }, [user?.userId]);
+
+  const router = useRouter();
+
+  const handleLeaveBuddy = async () => {
+    if (!user?.userId) return;
+    // confirm already handled in UI, but double-check
+    if (typeof window !== "undefined" && !window.confirm("Are you sure you want to leave your buddy? This will reset your streak.")) {
+      return;
+    }
+    setIsBuddyLoading(true);
+    try {
+      const userRes = await client.models.UserProfile.get({ id: user.userId });
+      const userProfile = userRes?.data || {};
+      const buddyId = userProfile?.buddy_id;
+      if (!buddyId) {
+        // nothing to do
+        setActiveBuddy(null);
+        return;
+      }
+
+      // Clear buddy_id for both users and optionally clear requests/sent
+        await Promise.all([
+          client.models.UserProfile.update({ id: user.userId, buddy_id: null }),
+          client.models.UserProfile.update({ id: buddyId, buddy_id: null }),
+        ]);
+
+      // Update local state
+      setActiveBuddy(null);
+      // Refresh server-side data and re-run fetches
+      await getBuddy();
+      try {
+        router.refresh();
+      } catch (e) {
+        // router.refresh may not be available in some contexts; ignore
+      }
+    } catch (err) {
+      console.error("Failed to leave buddy:", err);
+      if (typeof window !== "undefined") {
+        window.alert("Failed to leave buddy. Check console for details.");
+      }
+    } finally {
+      setIsBuddyLoading(false);
+    }
+  };
 
   // Users only have one buddy at a time; `activeBuddy` is the constant buddy on the right (or null)
-  const [activeBuddy, setActiveBuddy] = useState({ id: 100, username: "Alex Kim", streak: 12 });
-
+  
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Navbar variant="default" />
@@ -56,8 +140,18 @@ export default function Page() {
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-full bg-gray-300"></div>
                   <div>
-                    <div className="text-lg font-medium text-gray-900">{activeBuddy ? activeBuddy.username : "No Buddy"}</div>
-                    <div className="text-sm text-gray-500">{activeBuddy ? (
+                    <div className="flex items-center gap-2">
+                      {isBuddyLoading && (
+                        <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                      )}
+                      <div className="text-lg font-medium text-gray-900">{isBuddyLoading ? "Loading..." : (activeBuddy ? activeBuddy.username : "No Buddy")}</div>
+                    </div>
+                    <div className="text-sm text-gray-500">{isBuddyLoading ? (
+                      "Loading buddy info..."
+                    ) : activeBuddy ? (
                       <>Streak: <span className="font-semibold text-purple-600">{activeBuddy.streak}d</span></>
                     ) : (
                       "You currently have no active buddy"
@@ -65,19 +159,14 @@ export default function Page() {
                   </div>
                 </div>
                 <div>
-                  {activeBuddy ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        if (typeof window !== 'undefined' && window.confirm('Are you sure you want to leave your buddy? This will reset your streak.')) {
-                          setActiveBuddy(null);
-                        }
-                      }}
-                      className="text-sm text-white bg-red-600 px-3 py-1 rounded"
+                      onClick={() => handleLeaveBuddy()}
+                      disabled={isBuddyLoading}
+                      className="text-sm text-white bg-red-600 px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Leave Buddy
+                      {isBuddyLoading ? "Leaving..." : "Leave Buddy"}
                     </button>
-                  ) : null}
                 </div>
               </div>
 

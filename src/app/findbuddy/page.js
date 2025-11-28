@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
 import ProfilePicture from "../components/ProfilePicture";
 import { generateClient } from "aws-amplify/data";
@@ -12,6 +13,7 @@ const client = generateClient({
 
 export default function Page() {
   const { user } = useAuth();
+  const router = useRouter();
 
   const [users, setUsers] = useState([]);
   const [nextToken, setNextToken] = useState(null);
@@ -276,7 +278,12 @@ export default function Page() {
         ];
       });
 
-      await loadUserRequests();
+      await loadUserRequests(); 
+      try {
+        router.refresh();
+      } catch (e) {
+        console.warn("router.refresh failed:", e);
+      }
 
       return true;
     } catch (error) {
@@ -321,7 +328,49 @@ export default function Page() {
       setSentRequests([]);
       setReceivedRequests([]);
 
-      await loadUserRequests();
+      // Remove both users' ids from all other users' sent/request arrays (fire-and-forget)
+      const removeIdsFromAll = async (idsToRemove = []) => {
+        if (!Array.isArray(idsToRemove) || idsToRemove.length === 0) return;
+        const removeSet = new Set(idsToRemove);
+        try {
+          let next = null;
+          do {
+            const listRes = await client.models.UserProfile.list({ limit: 100, nextToken: next });
+            const items = listRes?.data || [];
+            next = listRes?.nextToken;
+
+            const updates = [];
+            for (const p of items) {
+              if (!p || !p.id) continue;
+              if (removeSet.has(p.id)) continue; // skip the users being removed
+
+              const sent = Array.isArray(p.sent) ? p.sent : [];
+              const request = Array.isArray(p.request) ? p.request : [];
+
+              const newSent = sent.filter((uid) => !removeSet.has(uid));
+              const newRequest = request.filter((uid) => !removeSet.has(uid));
+
+              if (newSent.length !== sent.length || newRequest.length !== request.length) {
+                const payload = { id: p.id };
+                if (newSent.length !== sent.length) payload.sent = newSent;
+                if (newRequest.length !== request.length) payload.request = newRequest;
+                updates.push(client.models.UserProfile.update(payload));
+              }
+            }
+
+            if (updates.length) {
+              await Promise.allSettled(updates);
+            }
+          } while (next);
+        } catch (e) {
+          console.error("Failed to clean up accepted users from other profiles:", e);
+        }
+      };
+
+      // fire-and-forget cleanup for both users (acceptor and accepted)
+      removeIdsFromAll([selectedUserId, user.userId]).catch((e) => console.error("Cleanup failed:", e));
+
+      await loadUserRequests(); 
     } catch (err) {
       console.error("Error accepting request:", err);
       throw err;
