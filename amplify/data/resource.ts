@@ -16,7 +16,7 @@ const schema = a.schema({
       school: a.string().required(),
       pfp_key: a.string(),
       buddy_id: a.id(),
-      requests: a.id().array(),
+      request: a.id().array(),
       sent: a.id().array(),
     })
     .authorization((allow) => [allow.authenticated()]),
@@ -50,8 +50,6 @@ const schema = a.schema({
       time: a.datetime(),
     })
     .authorization((allow) => [allow.authenticated()]),
-
-
 });
 
 export type Schema = ClientSchema<typeof schema>;
