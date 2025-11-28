@@ -73,8 +73,8 @@ export async function middleware(request) {
         const result = await apiResponse.json();
         const profile = result.data?.getUserProfile;
         return {
-          hasProfile: profile !== null,
-          hasBuddy: profile?.buddy_id !== null && profile?.buddy_id !== undefined,
+          hasProfile: profile,
+          hasBuddy: profile?.buddy_id,
         };
       } catch (error) {
         // Suppress "no federated jwt" errors for unauthenticated users
