@@ -18,6 +18,7 @@ const schema = a.schema({
       buddy_id: a.id(),
       request: a.id().array(),
       sent: a.id().array(),
+      banned: a.boolean().default(false),
     })
     .authorization((allow) => [allow.authenticated()]),
 
@@ -48,6 +49,17 @@ const schema = a.schema({
       sender_id: a.id().required(),
       reciever_id: a.id(),
       time: a.datetime(),
+    })
+    .authorization((allow) => [allow.authenticated()]),
+
+  Report: a
+    .model({
+      id: a.id().required(),
+      reported_user_id: a.id().required(),
+      reporter_user_id: a.id().required(),
+      reporter_username: a.string().required(),
+      reason: a.string().required(),
+      created_at: a.datetime(),
     })
     .authorization((allow) => [allow.authenticated()]),
 });
