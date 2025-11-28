@@ -15,9 +15,9 @@ const schema = a.schema({
       interests: a.string().array(),
       school: a.string().required(),
       pfp_key: a.string(),
-      request: a.string().array(),
-      sent: a.string().array(),
-      buddy_id: a.string(),
+      buddy_id: a.id(),
+      requests: a.id().array(),
+      sent: a.id().array(),
     })
     .authorization((allow) => [allow.authenticated()]),
 
@@ -39,6 +39,19 @@ const schema = a.schema({
       created_at: a.datetime(),
     })
     .authorization((allow) => [allow.authenticated()]),
+
+  Tasks: a
+    .model({
+      id: a.id().required(),
+      task: a.string(),
+      img_proof: a.string(),
+      sender_id: a.id().required(),
+      reciever_id: a.id(),
+      time: a.datetime(),
+    })
+    .authorization((allow) => [allow.authenticated()]),
+
+
 });
 
 export type Schema = ClientSchema<typeof schema>;
