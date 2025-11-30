@@ -3,13 +3,13 @@
 import { useMemo, useState, useEffect } from "react";
 import Navbar from "../components/Navbar";
 import { generateClient } from "aws-amplify/data";
+import { clearBuddyAndCleanup } from "@/lib/buddyUtils";
+import ProfilePicture from "../components/ProfilePicture";
 import { useAuth } from "@/lib/auth-context";
 
 export default function Page() {
   const { user, isLoading: authLoading } = useAuth();
   const [users, setUsers] = useState([]);
-  const [reports, setReports] = useState([]);
-  const [userProfiles, setUserProfiles] = useState({});
   const [loading, setLoading] = useState(true);
   const [selectedUserId, setSelectedUserId] = useState(null);
 
@@ -29,46 +29,59 @@ export default function Page() {
 
         // Fetch all reports
         const { data: reportsData } = await client.models.Report.list();
-        setReports(reportsData || []);
 
-        // Fetch all user profiles
-        const { data: profilesData } = await client.models.UserProfile.list();
+        if (!reportsData || reportsData.length === 0) {
+          setUsers([]);
+          setLoading(false);
+          return;
+        }
 
-        // Create a map of user profiles for easy lookup
+        // Fetch user profiles for all reported users
+        const profilePromises = reportsData.map((r) => {
+          return client.models.UserProfile.get({ id: r.reported_user_id });
+        });
+
+        const profileResults = await Promise.allSettled(profilePromises);
         const profilesMap = {};
-        (profilesData || []).forEach((profile) => {
-          profilesMap[profile.id] = profile;
-        });
-        setUserProfiles(profilesMap);
-
-        // Group reports by reported user
-        const reportsByUser = {};
-        (reportsData || []).forEach((report) => {
-          if (!reportsByUser[report.reported_user_id]) {
-            reportsByUser[report.reported_user_id] = [];
+        profileResults.forEach((res, idx) => {
+          if (res.status === "fulfilled" && res.value?.data) {
+            const id = reportsData[idx].reported_user_id;
+            profilesMap[id] = res.value.data;
           }
-          reportsByUser[report.reported_user_id].push(report);
         });
 
-        // Create users array with reports
-        const usersWithReports = Object.keys(reportsByUser).map((userId) => {
+        // Group reports by reported_user_id and aggregate all report entries
+        const usersMap = {};
+        
+        (reportsData || []).forEach((report) => {
+          const userId = report.reported_user_id;
           const profile = profilesMap[userId];
-          const userReports = reportsByUser[userId].map((r) => ({
-            id: r.id,
-            reporter: r.reporter_username,
-            reason: r.reason,
-            date: r.created_at
-              ? new Date(r.created_at).toLocaleDateString()
-              : "N/A",
-          }));
+          
+          if (!usersMap[userId]) {
+            usersMap[userId] = {
+              id: userId,
+              username: profile?.username || report.reported_username || "Unknown",
+              banned: profile?.banned || false,
+              reports: [],
+            };
+          }
 
-          return {
-            id: userId,
-            username: profile?.username || "Unknown User",
-            banned: profile?.banned || false,
-            reports: userReports,
-          };
+          // Add all report entries from this report record
+          const reporters = report.reporter_username || [];
+          const reasons = report.reason || [];
+          const dates = report.created_at || [];
+
+          reporters.forEach((name, i) => {
+            usersMap[userId].reports.push({
+              id: `${report.reported_user_id}-${usersMap[userId].reports.length}`,
+              reporter: name,
+              reason: reasons[i] || "",
+              date: dates[i] || "",
+            });
+          });
         });
+
+        const usersWithReports = Object.values(usersMap);
 
         setUsers(usersWithReports);
         if (usersWithReports.length > 0) {
@@ -101,20 +114,21 @@ export default function Page() {
       return;
 
     try {
-      const client = generateClient({
-        authMode: "userPool",
-      });
+      // First clear buddy relationships and references for this user
+      try {
+        await clearBuddyAndCleanup(id);
+      } catch (cleanupErr) {
+        console.error("Cleanup before ban failed:", cleanupErr);
+        // continue to set banned flag even if cleanup failed
+      }
+
+      const client = generateClient({ authMode: "userPool" });
 
       // Update the user profile in the database
-      await client.models.UserProfile.update({
-        id: id,
-        banned: true,
-      });
+      await client.models.UserProfile.update({ id: id, banned: true, buddy_id: "1" });
 
       // Update local state
-      setUsers((prev) =>
-        prev.map((u) => (u.id === id ? { ...u, banned: true } : u))
-      );
+      setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, banned: true } : u)));
     } catch (error) {
       console.error("Error banning user:", error);
       alert("Failed to ban user. Please try again.");
@@ -131,6 +145,7 @@ export default function Page() {
       await client.models.UserProfile.update({
         id: id,
         banned: false,
+        buddy_id: null,
       });
 
       // Update local state
@@ -172,9 +187,7 @@ export default function Page() {
                         selectedUserId === u.id ? "ring-2 ring-purple-300" : ""
                       }`}
                     >
-                      <div className="h-12 w-12 rounded-full flex-shrink-0 bg-purple-400 flex items-center justify-center text-white font-semibold">
-                        {u.username.charAt(0).toUpperCase()}
-                      </div>
+                      <ProfilePicture userId={u.id} size="sm" />
                       <div className="flex-1">
                         <div className="font-medium text-gray-900">
                           {u.username}
@@ -208,9 +221,7 @@ export default function Page() {
               ) : (
                 <>
                   <div className="flex items-center gap-6 mb-4">
-                    <div className="h-16 w-16 rounded-full bg-purple-400 flex items-center justify-center text-white font-bold text-xl">
-                      {selectedUser.username.charAt(0).toUpperCase()}
-                    </div>
+                    <ProfilePicture userId={selectedUser.id} size="m"/>
                     <div>
                       <div className="text-xl font-semibold">
                         {selectedUser.username}

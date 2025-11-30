@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
+import ProfilePicture from "../components/ProfilePicture";
 import { generateClient } from "aws-amplify/data";
 import { useAuth } from "@/lib/auth-context";
+import { formatDate } from "@/lib/helperFuncts";
 
 const client = generateClient({
   authMode: "userPool",
@@ -16,7 +18,7 @@ export default function Page() {
   const { user } = useAuth();
   // Active buddy state (single object or null)
   const [activeBuddy, setActiveBuddy] = useState(null);
-  const [isBuddyLoading, setIsBuddyLoading] = useState(false);
+  const [isButtonLoading, setIsButtonLoading] = useState(false);
   // Leaderboard shows top pairs (two usernames per entry)
   const pairs = [
     { id: 1, users: ["Alex Kim", "Samira Noor"], streak: 18 },
@@ -33,7 +35,7 @@ export default function Page() {
 
   const getBuddy = async () => {
     if (!user?.userId) return;
-    setIsBuddyLoading(true);
+    setIsButtonLoading(true);
     try {
       // fetch current user's profile to read buddy_id
       const userRes = await client.models.UserProfile.get({ id: user.userId });
@@ -51,7 +53,7 @@ export default function Page() {
       console.error("Failed to load buddy:", err);
       setActiveBuddy(null);
     } finally {
-      setIsBuddyLoading(false);
+      setIsButtonLoading(false);
     }
   };
 
@@ -67,7 +69,7 @@ export default function Page() {
     if (typeof window !== "undefined" && !window.confirm("Are you sure you want to leave your buddy? This will reset your streak.")) {
       return;
     }
-    setIsBuddyLoading(true);
+    setIsButtonLoading(true);
     try {
       const userRes = await client.models.UserProfile.get({ id: user.userId });
       const userProfile = userRes?.data || {};
@@ -99,12 +101,77 @@ export default function Page() {
         window.alert("Failed to leave buddy. Check console for details.");
       }
     } finally {
-      setIsBuddyLoading(false);
+      setIsButtonLoading(false);
     }
   };
 
-  // Users only have one buddy at a time; `activeBuddy` is the constant buddy on the right (or null)
-  
+  const reportUser = async () => {
+    if (!user?.userId) return;
+
+    //Quick confirmation check
+    const ok = typeof window !== "undefined" ? window.confirm("Report this user for inappropriate behavior?") : true;
+    if (!ok) return;
+
+    let reason = null;
+    if (typeof window !== "undefined") {
+      reason = window.prompt("Optional: add a short reason for the report (visible to admins)", "");
+    }
+    
+    const reportReason = reason?.trim() || "No reason provided.";
+
+    try {
+      // Fetch profiles to get usernames
+      const currentUserProfile = await client.models.UserProfile.get({ id: user.userId });
+      const id = currentUserProfile?.data.buddy_id;
+      console.log(id);
+      const selectedUserProfile = await client.models.UserProfile.get({ id: id});
+      
+      if (!currentUserProfile.data) {
+        throw new Error("Failed to fetch current user profile");
+      }
+
+      const reporterUsername = currentUserProfile.data.username || "";
+      const reportedUsername = selectedUserProfile.data.username || "";
+
+      //Check to see if report records exists first
+      const existing = await client.models.Report.get({reported_user_id: id});
+
+      const formattedDate = formatDate(new Date());
+
+
+      //makes the report record in the database
+      if (existing.data) {
+        //edge testing incase a repeat report somehow happens
+        if (existing.data.reporter_username.includes(reporterUsername)) {
+          alert("You have already reported this user.");
+          return;
+        }
+        await client.models.Report.update({
+          reported_user_id: id,
+          reporter_username: [...existing.data.reporter_username, reporterUsername],
+          amt: existing.data.amt + 1,
+          reason: [...existing.data.reason, reportReason],
+          created_at: [...existing.data.created_at, formattedDate],
+        })
+      } else {
+        await client.models.Report.create({
+          reported_user_id: id,
+          reported_username: reportedUsername,
+          reporter_username: [reporterUsername],
+          amt: 1,
+          reason: [reportReason],
+          created_at: [formattedDate],
+        })
+      }
+      if (typeof window !== "undefined") {
+        window.alert("User reported. Thank you — moderators will review the report.");
+      }
+    } catch (err) {
+      console.error("Failed to report user:", err);
+      if (typeof window !== "undefined") window.alert("Failed to report user. See console for details.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Navbar variant="default" />
@@ -138,35 +205,48 @@ export default function Page() {
               {/* Chat header */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-gray-300"></div>
+                  {activeBuddy ? (
+                    <ProfilePicture userId={activeBuddy.id} size="lg" />
+                  ) : (
+                    <div className="h-12 w-12 rounded-full bg-gray-300"></div>
+                  )}
                   <div>
                     <div className="flex items-center gap-2">
-                      {isBuddyLoading && (
+                      {isButtonLoading && (
                         <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
                         </svg>
                       )}
-                      <div className="text-lg font-medium text-gray-900">{isBuddyLoading ? "Loading..." : (activeBuddy ? activeBuddy.username : "No Buddy")}</div>
+                      <div className="text-lg font-medium text-gray-900">{isButtonLoading ? "Loading..." : (activeBuddy ? activeBuddy.username : "No Buddy")}</div>
                     </div>
-                    <div className="text-sm text-gray-500">{isBuddyLoading ? (
+                    <div className="text-sm text-gray-500">{isButtonLoading ? (
                       "Loading buddy info..."
                     ) : activeBuddy ? (
-                      <>Streak: <span className="font-semibold text-purple-600">{activeBuddy.streak}d</span></>
+                      <>Streak: <span className="font-semibold text-purple-600">{activeBuddy.streak || 0}</span></>
                     ) : (
                       "You currently have no active buddy"
                     )}</div>
                   </div>
                 </div>
-                <div>
-                    <button
-                      type="button"
-                      onClick={() => handleLeaveBuddy()}
-                      disabled={isBuddyLoading}
-                      className="text-sm text-white bg-red-600 px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isBuddyLoading ? "Leaving..." : "Leave Buddy"}
-                    </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleLeaveBuddy()}
+                    disabled={isButtonLoading}
+                    className="text-sm text-white bg-red-600 px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isButtonLoading ? "..." : "Leave Buddy"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => reportUser()}
+                    disabled={isButtonLoading}
+                    className="text-sm bg-red-50 text-red-600 px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Report
+                  </button>
                 </div>
               </div>
 
