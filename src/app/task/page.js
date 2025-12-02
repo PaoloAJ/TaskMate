@@ -423,7 +423,7 @@ export default function TaskPage() {
           <div className="col-span-6">
             <div className="border rounded-lg bg-white p-6 h-full">
               <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">
-                Buddy's Task
+                Buddy&apos;s Task
               </h3>
               {buddyTask ? (
                 <div className="space-y-4">
