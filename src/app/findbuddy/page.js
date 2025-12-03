@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
 import ProfilePicture from "../components/ProfilePicture";
+import { formatDate, arraysEqualAsSets } from "@/lib/helperFuncts";
 import { generateClient } from "aws-amplify/data";
 import { useAuth } from "@/lib/auth-context";
 
@@ -28,11 +29,11 @@ export default function Page() {
     isNextPage = false
   ) => {
     if (!idToFilter) {
-      console.log("No user ID to filter by");
+      // console.log("No user ID to filter by");
       return;
     }
+    console.log("bro");
     setLoading(true);
-    console.log("Fetching users, filtering out user ID:", idToFilter);
     try {
       const { data: newUsers, nextToken: newNextToken } =
         await client.models.UserProfile.list({
@@ -42,8 +43,8 @@ export default function Page() {
             id: { ne: idToFilter },
           },
         });
-      console.log("Fetched users:", newUsers);
-      console.log("Next token:", newNextToken);
+      // console.log("Fetched users:", newUsers);
+      // console.log("Next token:", newNextToken);
       const visible = (newUsers || []).filter((u) => !u?.buddy_id);
       setUsers(visible);
       setNextToken(newNextToken);
@@ -82,7 +83,7 @@ export default function Page() {
 
   useEffect(() => {
     if (user?.userId && !hasFetchedRef.current) {
-      console.log("Current user ID:", user.userId);
+      // console.log("Current user ID:", user.userId);
       hasFetchedRef.current = true;
       setUsers([]); // reset users when user changes
       setCurrentPage(1);
@@ -97,13 +98,6 @@ export default function Page() {
 
   const hasLoadedRequestsRef = useRef(false);
 
-  // Helper function to compare arrays as sets (extracted to avoid recreation)
-  const arraysEqualAsSets = (a = [], b = []) => {
-    if (a.length !== b.length) return false;
-    const sa = new Set(a);
-    for (const v of b) if (!sa.has(v)) return false;
-    return true;
-  };
 
   // Load the current user's sent/received IDs from the DB, fetch each profile,
   // then store minimal profile objects for UI display.
@@ -174,11 +168,7 @@ export default function Page() {
         }
       }
 
-      //refresh the user list for the left side
-      //updates during every button click, takes a while to load, but is technically optimal
-      //  setUsers([]);
-      //  setNextToken(null);
-      //  await fetchUsers(null, user.userId);
+      // console.log(sentRequests);
     } catch (err) {
       console.error("Error loading requests:", err);
     }
@@ -192,7 +182,6 @@ export default function Page() {
   }, [users, selected]);
 
   //load requests / sent on mount
-  //if loaduserrequest on every click, then needs to be commented out so no double users
   useEffect(() => {
     if (user?.userId && !hasLoadedRequestsRef.current) {
       hasLoadedRequestsRef.current = true;
@@ -204,13 +193,20 @@ export default function Page() {
   const [sentRequests, setSentRequests] = useState([]);
   const [receivedRequests, setReceivedRequests] = useState([]);
 
+  const isInSent = (req, id) => {
+    for (const prof in req) {
+      if (prof.id === id) return true;
+    }
+    return false;
+  }
+
   const sendRequest = async (selectedUser) => {
     const selectedUserId = selectedUser.id;
     if (!user?.userId || !selectedUserId) {
       throw new Error("User ID or selected user ID is missing");
     }
 
-    if (actionLoading) return; // Prevent concurrent operations
+    if (actionLoading) return;
     setActionLoading(true);
 
     try {
@@ -251,7 +247,6 @@ export default function Page() {
       const updatedCurrentUserSent = [...currentUserSent, selectedUserId];
       const updatedSelectedUserRequest = [...selectedUserRequest, user.userId];
 
-      // Update both profiles in parallel
       await Promise.all([
         client.models.UserProfile.update({
           id: user.userId,
@@ -279,8 +274,10 @@ export default function Page() {
       });
 
       await loadUserRequests(); 
+      await fetchUsers(null, user.userId, false);
       try {
         router.refresh();
+        console.log("success");
       } catch (e) {
         console.warn("router.refresh failed:", e);
       }
@@ -431,7 +428,7 @@ export default function Page() {
 
   const cancelRequest = async (id) => {
     const selectedUserId = id;
-    if (actionLoading) return; // Prevent concurrent operations
+    if (actionLoading) return;
     setActionLoading(true);
 
     try {
@@ -477,6 +474,79 @@ export default function Page() {
     }
   };
 
+  // Local reported users state (UI-only placeholder)
+  const [reportedUsers, setReportedUsers] = useState([]);
+
+  const reportUser = async (id) => {
+    if (!id) return;
+    if (reportedUsers.includes(id)) return;
+    if (!user?.userId) return;
+
+    //Quick confirmation check
+    const ok = typeof window !== "undefined" ? window.confirm("Report this user for inappropriate behavior?") : true;
+    if (!ok) return;
+
+    let reason = null;
+    if (typeof window !== "undefined") {
+      reason = window.prompt("Optional: add a short reason for the report (visible to admins)", "");
+    }
+    
+    const reportReason = reason?.trim() || "No reason provided.";
+
+    try {
+      // Fetch profiles to get usernames
+      const currentUserProfile = await client.models.UserProfile.get({ id: user.userId });
+      const selectedUserProfile = await client.models.UserProfile.get({ id: id});
+      
+      if (!currentUserProfile.data) {
+        throw new Error("Failed to fetch current user profile");
+      }
+
+      const reporterUsername = currentUserProfile.data.username || "";
+      const reportedUsername = selectedUserProfile.data.username || "";
+
+      //Check to see if report records exists first
+      const existing = await client.models.Report.get({reported_user_id: id});
+
+      const formattedDate = formatDate(new Date());
+      console.log(formattedDate);
+
+      //makes the report record in the database
+      if (existing.data) {
+        //edge testing incase a repeat report somehow happens
+        if (existing.data.reporter_username.includes(reporterUsername)) {
+          alert("You have already reported this user.");
+          return;
+        }
+        await client.models.Report.update({
+          reported_user_id: id,
+          reporter_username: [...existing.data.reporter_username, reporterUsername],
+          amt: existing.data.amt + 1,
+          reason: [...existing.data.reason, reportReason],
+          created_at: [...existing.data.created_at, formattedDate],
+        })
+      } else {
+        await client.models.Report.create({
+          reported_user_id: id,
+          reported_username: reportedUsername,
+          reporter_username: [reporterUsername],
+          amt: 1,
+          reason: [reportReason],
+          created_at: [formattedDate],
+        })
+      }
+
+      // mark as reported locally so button disables
+      setReportedUsers((prev) => (prev.includes(id) ? prev : [...prev, id]));
+      if (typeof window !== "undefined") {
+        window.alert("User reported. Thank you — moderators will review the report.");
+      }
+    } catch (err) {
+      console.error("Failed to report user:", err);
+      if (typeof window !== "undefined") window.alert("Failed to report user. See console for details.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Navbar variant="dashboard" />
@@ -485,45 +555,47 @@ export default function Page() {
         <div className="max-w-6xl mx-auto grid grid-cols-12 gap-6">
           {/* Left list */}
           <div className="col-span-8">
-            <div className="bg-white border border-gray-200 rounded-lg p-4 h-full">
-              <h2 className="text-xl font-semibold mb-4">Users</h2>
+            <div className="bg-white border border-gray-200 rounded-lg p-4 h-full flex flex-col">
+              <div className="flex-1 overflow-auto">
+                <h2 className="text-xl font-semibold mb-4">Users</h2>
 
-              {loading && users.length === 0 ? (
-                <div className="flex items-center justify-center py-8">
-                  <p className="text-gray-500">Loading users...</p>
-                </div>
-              ) : users.length === 0 ? (
-                <div className="flex items-center justify-center py-8">
-                  <p className="text-gray-500">No users found</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {users.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelected(p)}
-                      className={`w-full flex items-center space-x-4 p-3 rounded-md hover:bg-gray-50 transition text-left ${
-                        selected?.id === p.id ? "ring-2 ring-purple-300" : ""
-                      }`}
-                    >
-                      <ProfilePicture userId={p.id} size="sm" />
+                {loading && users.length === 0 ? (
+                  <div className="flex items-center justify-center py-8">
+                    <p className="text-gray-500">Loading users...</p>
+                  </div>
+                ) : users.length === 0 ? (
+                  <div className="flex items-center justify-center py-8">
+                    <p className="text-gray-500">No users found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {users.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => setSelected(p)}
+                        className={`w-full flex items-center space-x-4 p-3 rounded-md hover:bg-gray-50 transition text-left ${
+                          selected?.id === p.id ? "ring-2 ring-purple-300" : ""
+                        }`}
+                      >
+                        <ProfilePicture userId={p.id} size="sm" />
 
-                      <div className="text-sm text-gray-700">
-                        <div className="font-medium">
-                          {p.username || "Unknown"}
+                        <div className="text-sm text-gray-700">
+                          <div className="font-medium">
+                            {p.username || "Unknown"}
+                          </div>
+                          <div className="text-gray-500 text-xs">
+                            {p.school || "N/A"} |{" "}
+                            {p.interests?.join(", ") || "No interests"}
+                          </div>
                         </div>
-                        <div className="text-gray-500 text-xs">
-                          {p.school || "N/A"} |{" "}
-                          {p.interests?.join(", ") || "No interests"}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Pagination Controls */}
-              {!loading && users.length > 0 && (
+              {!loading && users.length >= 0 && (
                 <div className="mt-4 flex items-center justify-between">
                   <button
                     onClick={goToPreviousPage}
@@ -555,9 +627,19 @@ export default function Page() {
               {selected ? (
                 <>
                   <div className="flex flex-col items-center">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                      {selected.username}
-                    </h2>
+                    <div className="w-full flex items-start justify-between mb-4">
+                      <h2 className="text-2xl font-bold text-gray-900">
+                        {selected.username}
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={() => reportUser(selected.id)}
+                        disabled={actionLoading || reportedUsers.includes(selected.id)}
+                        className="text-sm bg-red-50 text-red-600 px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {reportedUsers.includes(selected.id) ? "Reported" : "Report"}
+                      </button>
+                    </div>
 
                     <ProfilePicture userId={selected.id} size="xl" />
 
@@ -586,7 +668,7 @@ export default function Page() {
                   <div className="mt-6">
                     <button
                       type="button"
-                      disabled={actionLoading}
+                      disabled={actionLoading || isInSent(sentRequests,selected.id)}
                       onClick={async () => {
                         try {
                           await sendRequest(selected);
@@ -642,6 +724,7 @@ export default function Page() {
                     >
                       Sent
                     </button>
+                    
                   </div>
 
                   <div>

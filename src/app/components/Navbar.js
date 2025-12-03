@@ -11,12 +11,13 @@ function Navbar({ variant = "default" }) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const menuRef = useRef(null);
 
-  const isDefPage = variant === "default";
   const isAuthPage = variant === "auth";
   const isDashboardPage = variant === "dashboard";
+  const isBanned = variant === "banned";
+
 
   // Show navigation links only for authenticated users (except on auth/dashboard variants)
-  const showNavLinks = isAuthenticated && !isAuthPage && !isDashboardPage;
+  const showNavLinks = isAuthenticated && !isAuthPage && !isDashboardPage && !isBanned;
 
   const handleSignOut = async () => {
     try {

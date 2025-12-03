@@ -310,10 +310,7 @@ export default function Page() {
                   />
                 )}
                 <div className="text-lg font-semibold mt-4">
-                  {formData.name || "Your Name"}
-                </div>
-                <div className="mt-4 text-sm text-gray-600 text-center">
-                  Username: {formData.username}
+                  {formData.username}
                 </div>
                 <div className="mt-4 text-sm text-gray-600 text-center">
                   University: {formData.university || "Not set"}

@@ -12,8 +12,11 @@ export async function middleware(request) {
   const setupProfileRoute = "/setup-profile";
   const findBuddyRoute = "/findbuddy";
   // Routes that require both profile AND buddy
-  const fullyProtectedRoutes = ["/home", "/leaderboard", "/settings"];
+  const fullyProtectedRoutes = ["/home", "/tasks", "chat"];
   const isFullyProtectedRoute = fullyProtectedRoutes.includes(pathname);
+  // Routes that requires Admin status
+  const adminRoute = ["/eaderboard", "/admin", "/banned"]
+  const isAdminRoute = adminRoute.includes(pathname);
 
   // Check authentication
   const authenticated = await runWithAmplifyServerContext({
@@ -36,7 +39,7 @@ export async function middleware(request) {
     },
   });
 
-  const { hasProfile, hasBuddy } = await runWithAmplifyServerContext({
+  const { hasProfile, hasBuddy, isBanned, isAdmin } = await runWithAmplifyServerContext({
     nextServerContext: { request, response },
     operation: async (contextSpec) => {
       try {
@@ -54,6 +57,8 @@ export async function middleware(request) {
             getUserProfile(id: $id) {
               id
               buddy_id
+              banned
+              admin
             }
           }
         `;
@@ -75,13 +80,15 @@ export async function middleware(request) {
         return {
           hasProfile: profile,
           hasBuddy: profile?.buddy_id,
+          isBanned: profile?.banned,
+          isAdmin: profile?.admin,
         };
       } catch (error) {
         // Suppress "no federated jwt" errors for unauthenticated users
         if (error.message && !error.message.includes("No federated jwt")) {
           console.log("Profile check error:", error);
         }
-        return { hasProfile: false, hasBuddy: false };
+        return { hasProfile: false, hasBuddy: false , isBanned: false, isAdmin: false};
       }
     },
   });
@@ -92,6 +99,8 @@ export async function middleware(request) {
   console.log(`[Middleware] Is Public Route: ${isPublicRoute}`);
   console.log(`[Middleware] Has Profile: ${hasProfile}`);
   console.log(`[Middleware] Has Buddy: ${hasBuddy}`);
+  console.log(`[Middleware] Is Banned: ${isBanned}`);
+  console.log(`[Middleware] Is Admin: ${isAdmin}`);
 
   // PUBLIC ROUTES LOGIC
   if (isPublicRoute) {
@@ -137,6 +146,9 @@ export async function middleware(request) {
       // Already has a buddy, redirect to home
       return NextResponse.redirect(new URL("/home", request.url));
     }
+    if (isBanned) {
+      return NextResponse.redirect(new URL("/banned", request.url));
+    }
     // User has profile but no buddy - allow access to findbuddy
     return response;
   }
@@ -157,6 +169,9 @@ export async function middleware(request) {
     if (!hasBuddy) {
       // Need to find a buddy first
       return NextResponse.redirect(new URL("/findbuddy", request.url));
+    }
+    if (isBanned) {
+      return NextResponse.redirect(new URL("/banned", request.url));
     }
   }
 
