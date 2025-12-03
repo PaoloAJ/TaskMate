@@ -115,7 +115,7 @@ export default function ChatPage() {
           <div className="flex flex-col items-center">
             <h1 className="text-3xl font-bold text-[#563478] mb-8">Chat</h1>
             <p className="text-gray-600">
-              You don't have a buddy yet. Please find a buddy first to start
+              You don&apos;t have a buddy yet. Please find a buddy first to start
               chatting.
             </p>
           </div>
