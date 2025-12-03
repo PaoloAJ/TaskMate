@@ -75,12 +75,12 @@ function Navbar({ variant = "default" }) {
               >
                 Home
               </Link>
-              <Link
+              {/* <Link
                 href="/leaderboard"
                 className="text-[#563478]/70 hover:text-[#563478] transition-colors"
               >
                 Leaderboard
-              </Link>
+              </Link> */}
               <Link
                 href="/task"
                 className="text-[#563478]/70 hover:text-[#563478] transition-colors"
