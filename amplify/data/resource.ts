@@ -21,6 +21,36 @@ const schema = a.schema({
       banned: a.boolean().default(false),
       admin: a.boolean().default(false),
     })
+    .authorization((allow) => [allow.authenticated(), allow.publicApiKey()]),
+
+  Conversations: a
+    .model({
+      id: a.id().required(),
+      members: a.string().array().required(),
+      lastMessage: a.string(),
+      lastMessageAt: a.date(),
+    })
+    .authorization((allow) => [allow.authenticated()]),
+
+  Messages: a
+    .model({
+      id: a.id().required(),
+      conversation_id: a.id().required(),
+      message: a.string(),
+      sender_id: a.id(),
+      created_at: a.datetime(),
+    })
+    .authorization((allow) => [allow.authenticated()]),
+
+  Tasks: a
+    .model({
+      id: a.id().required(),
+      task: a.string(),
+      img_proof: a.string(),
+      sender_id: a.id().required(),
+      reciever_id: a.id(),
+      time: a.datetime(),
+    })
     .authorization((allow) => [allow.authenticated()]),
 
   Conversations: a
@@ -72,5 +102,8 @@ export const data = defineData({
   schema,
   authorizationModes: {
     defaultAuthorizationMode: "userPool",
+    apiKeyAuthorizationMode: {
+      expiresInDays: 30,
+    },
   },
 });

@@ -7,15 +7,22 @@ export async function middleware(request) {
   const { pathname } = request.nextUrl;
   const response = NextResponse.next();
 
-  const publicRoutes = ["/", "/signin", "/signup", "/verify"];
+  const publicRoutes = [
+    "/",
+    "/signin",
+    "/signup",
+    "/verify",
+    "/forgot-password",
+    "/reset-password",
+  ];
   const isPublicRoute = publicRoutes.includes(pathname);
   const setupProfileRoute = "/setup-profile";
   const findBuddyRoute = "/findbuddy";
   // Routes that require both profile AND buddy
-  const fullyProtectedRoutes = ["/home", "/tasks", "chat"];
+  const fullyProtectedRoutes = ["/home", "/tasks", "chat", "/settings"];
   const isFullyProtectedRoute = fullyProtectedRoutes.includes(pathname);
   // Routes that requires Admin status
-  const adminRoute = ["/eaderboard", "/admin", "/banned"]
+  const adminRoute = ["/eaderboard", "/admin", "/banned"];
   const isAdminRoute = adminRoute.includes(pathname);
 
   // Check authentication
@@ -39,20 +46,21 @@ export async function middleware(request) {
     },
   });
 
-  const { hasProfile, hasBuddy, isBanned, isAdmin } = await runWithAmplifyServerContext({
-    nextServerContext: { request, response },
-    operation: async (contextSpec) => {
-      try {
-        const session = await fetchAuthSession(contextSpec);
-        const userId = session.tokens?.accessToken?.payload?.sub;
-        const token = session.tokens?.accessToken?.toString();
+  const { hasProfile, hasBuddy, isBanned, isAdmin } =
+    await runWithAmplifyServerContext({
+      nextServerContext: { request, response },
+      operation: async (contextSpec) => {
+        try {
+          const session = await fetchAuthSession(contextSpec);
+          const userId = session.tokens?.accessToken?.payload?.sub;
+          const token = session.tokens?.accessToken?.toString();
 
-        if (!userId || !token) {
-          return { hasProfile: false, hasBuddy: false };
-        }
+          if (!userId || !token) {
+            return { hasProfile: false, hasBuddy: false };
+          }
 
-        // Direct AppSync API call
-        const query = `
+          // Direct AppSync API call
+          const query = `
           query GetUserProfile($id: ID!) {
             getUserProfile(id: $id) {
               id
@@ -63,35 +71,40 @@ export async function middleware(request) {
           }
         `;
 
-        const apiResponse = await fetch(outputs.data.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: token,
-          },
-          body: JSON.stringify({
-            query,
-            variables: { id: userId },
-          }),
-        });
+          const apiResponse = await fetch(outputs.data.url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: token,
+            },
+            body: JSON.stringify({
+              query,
+              variables: { id: userId },
+            }),
+          });
 
-        const result = await apiResponse.json();
-        const profile = result.data?.getUserProfile;
-        return {
-          hasProfile: profile,
-          hasBuddy: profile?.buddy_id,
-          isBanned: profile?.banned,
-          isAdmin: profile?.admin,
-        };
-      } catch (error) {
-        // Suppress "no federated jwt" errors for unauthenticated users
-        if (error.message && !error.message.includes("No federated jwt")) {
-          console.log("Profile check error:", error);
+          const result = await apiResponse.json();
+          const profile = result.data?.getUserProfile;
+          return {
+            hasProfile: profile,
+            hasBuddy: profile?.buddy_id,
+            isBanned: profile?.banned,
+            isAdmin: profile?.admin,
+          };
+        } catch (error) {
+          // Suppress "no federated jwt" errors for unauthenticated users
+          if (error.message && !error.message.includes("No federated jwt")) {
+            console.log("Profile check error:", error);
+          }
+          return {
+            hasProfile: false,
+            hasBuddy: false,
+            isBanned: false,
+            isAdmin: false,
+          };
         }
-        return { hasProfile: false, hasBuddy: false , isBanned: false, isAdmin: false};
-      }
-    },
-  });
+      },
+    });
 
   // Log authentication status
   console.log(`[Middleware] Path: ${pathname}`);
@@ -172,6 +185,13 @@ export async function middleware(request) {
     }
     if (isBanned) {
       return NextResponse.redirect(new URL("/banned", request.url));
+    }
+  }
+
+  if (isAdminRoute) {
+    if (!isAdmin) {
+      // Non-admin users are redirected to home
+      return NextResponse.redirect(new URL("/home", request.url));
     }
   }
 
