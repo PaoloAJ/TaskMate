@@ -59,6 +59,7 @@ export default function Page() {
 
   useEffect(() => {
     getBuddy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.userId]);
 
   const router = useRouter();

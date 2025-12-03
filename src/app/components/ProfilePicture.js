@@ -33,6 +33,7 @@ export default function ProfilePicture({
   // Fetch on mount or when userId changes
   useEffect(() => {
     fetchProfilePicture();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   // Update when context changes (optimistic update)
@@ -42,7 +43,7 @@ export default function ProfilePicture({
       setProfilePicUrl(profilePicture.url);
       setLoading(false);
     }
-  }, [profilePicture.timestamp, userId]);
+  }, [profilePicture.timestamp, profilePicture.url, userId]);
 
   const fetchProfilePicture = async () => {
     try {
@@ -89,6 +90,7 @@ export default function ProfilePicture({
       {loading ? (
         <div className={`${sizeClass} rounded-full bg-gray-200 animate-pulse ${className}`} />
       ) : (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={profilePicUrl || '/default-avatar.png'}
           alt="Profile"

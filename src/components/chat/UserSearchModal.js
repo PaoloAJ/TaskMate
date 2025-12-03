@@ -12,6 +12,7 @@ export default function UserSearchModal({ isOpen, onClose, onSelectUser, current
     if (isOpen) {
       loadUsers();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   async function loadUsers() {

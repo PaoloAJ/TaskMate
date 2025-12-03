@@ -149,6 +149,7 @@ export default function ProfilePictureUpload({ userId, currentPfpKey, onUploadSu
       >
         <div className="h-24 w-24 rounded-full bg-gray-300 overflow-hidden flex items-center justify-center">
           {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={preview} alt="Profile" className="h-full w-full object-cover" />
           ) : (
             <span className="text-white text-xl font-bold">
