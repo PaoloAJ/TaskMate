@@ -123,7 +123,6 @@ export default function Page() {
       // Fetch profiles to get usernames
       const currentUserProfile = await client.models.UserProfile.get({ id: user.userId });
       const id = currentUserProfile?.data.buddy_id;
-      console.log(id);
       const selectedUserProfile = await client.models.UserProfile.get({ id: id});
       
       if (!currentUserProfile.data) {
