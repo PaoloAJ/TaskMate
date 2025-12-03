@@ -45,9 +45,10 @@ export default function SignUpPage() {
       newErrors.email = "Email is required";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "Email is invalid";
-    } else if (!formData.email.endsWith(".edu")) {
-      newErrors.email = "Email must end with .edu";
-    }
+    } 
+    // else if (!formData.email.endsWith(".edu")) {
+    //   newErrors.email = "Email must end with .edu";
+    // }
 
     if (!formData.password) {
       newErrors.password = "Password is required";
