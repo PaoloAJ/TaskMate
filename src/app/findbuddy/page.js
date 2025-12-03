@@ -187,6 +187,7 @@ export default function Page() {
       hasLoadedRequestsRef.current = true;
       loadUserRequests();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.userId]);
 
   // Placeholder pending requests

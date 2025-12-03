@@ -286,6 +286,7 @@ export default function TaskPage() {
     };
 
     fetchTask();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.userId]);
 
   useEffect(() => {
@@ -307,6 +308,7 @@ export default function TaskPage() {
     };
 
     fetchBuddyData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.userId]);
 
   return (
@@ -359,6 +361,7 @@ export default function TaskPage() {
                       {proofPreview ? (
                         <div className="space-y-3">
                           <div className="relative w-full h-48 rounded-lg overflow-hidden border border-gray-300">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={proofPreview}
                               alt="Proof preview"
@@ -436,6 +439,7 @@ export default function TaskPage() {
                         Proof Submitted
                       </h4>
                       <div className="relative w-full h-64 rounded-lg overflow-hidden border border-gray-300 mb-4">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={buddyTaskProof}
                           alt="Task proof"
