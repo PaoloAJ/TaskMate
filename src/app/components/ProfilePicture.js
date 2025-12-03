@@ -71,6 +71,7 @@ export default function ProfilePicture({
           path: profiles[0].pfp_key,
         });
         setProfilePicUrl(result.url.toString());
+        console.log(`balls: ${result.url.toString()}`);
       } else {
         setProfilePicUrl(null);
       }
@@ -92,7 +93,7 @@ export default function ProfilePicture({
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={profilePicUrl || '/default-avatar.png'}
+          src={profilePicUrl || '/good.jpg'}
           alt="Profile"
           className={`${sizeClass} rounded-full object-cover ${cursorClass} ${className}`}
           onClick={onClick}
