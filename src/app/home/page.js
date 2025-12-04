@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
 import ProfilePicture from "../components/ProfilePicture";
 import { generateClient } from "aws-amplify/data";
 import { useAuth } from "@/lib/auth-context";
-import { formatDate } from "@/lib/helperFuncts";
+import { formatDate, formatTime } from "@/lib/helperFuncts";
+import { useConversations } from "@/hooks/useConversations";
+import { useChat } from "@/hooks/useChat";
 
 const client = generateClient({
   authMode: "userPool",
@@ -19,6 +21,15 @@ export default function Page() {
   // Active buddy state (single object or null)
   const [activeBuddy, setActiveBuddy] = useState(null);
   const [isButtonLoading, setIsButtonLoading] = useState(false);
+  const [conversationId, setConversationId] = useState(null);
+  const [messageText, setMessageText] = useState("");
+  const messagesEndRef = useRef(null);
+  const messageInputRef = useRef(null);
+  const [userTasks, setUserTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+
+  const { getOrCreateConversation } = useConversations(user?.userId || null);
+  const { messages, isLoading: chatLoading, isSending, sendMessage } = useChat(conversationId, user?.userId || null);
   // Leaderboard shows top pairs (two usernames per entry)
   const pairs = [
     { id: 1, users: ["Alex Kim", "Samira Noor"], streak: 18 },
@@ -61,6 +72,73 @@ export default function Page() {
     getBuddy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.userId]);
+
+  // Load tasks assigned to the current user
+  const loadUserTasks = async () => {
+    if (!user?.userId) return;
+    setTasksLoading(true);
+    try {
+      const { data: tasks, errors } = await client.models.Tasks.list({
+        filter: { reciever_id: { eq: user.userId } },
+      });
+
+      if (errors) {
+        console.error("Errors fetching tasks:", errors);
+        setUserTasks([]);
+        return;
+      }
+
+      setUserTasks(tasks || []);
+    } catch (err) {
+      console.error("Failed to load tasks:", err);
+      setUserTasks([]);
+    } finally {
+      setTasksLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUserTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.userId]);
+
+  // When activeBuddy appears, ensure there's a conversation and set it
+  useEffect(() => {
+    let mounted = true;
+    async function ensureConversation() {
+      if (!activeBuddy || !user?.userId) {
+        setConversationId(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await getOrCreateConversation(activeBuddy.id);
+        if (error) {
+          console.error("Failed to get/create conversation:", error);
+          return;
+        }
+        if (mounted && data) {
+          // data may be the conversation object or an id
+          const id = data.id || data.conversation?.id || data;
+          setConversationId(id);
+        }
+      } catch (err) {
+        console.error("Error ensuring conversation:", err);
+      }
+    }
+
+    ensureConversation();
+    return () => {
+      mounted = false;
+    };
+  }, [activeBuddy?.id, user?.userId, getOrCreateConversation]);
+
+  // Auto-scroll when messages update
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
 
   const router = useRouter();
 
@@ -172,116 +250,196 @@ export default function Page() {
     }
   };
 
+  const goToChat = () => {
+    try {
+      router.push("/chat");
+    } catch (err) {
+      console.log("unable to go to chat");
+    }
+  };
+  
+  const goToTasks = () => {
+    try {
+      router.push("/task");
+    } catch (err) {
+      console.log
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Navbar variant="default" />
 
       <div className="flex-1 px-8 py-8">
         <div className="max-w-6xl mx-auto grid grid-cols-12 gap-6">
-          {/* Left - Leaderboard */}
+          {/* Left - Buddy details */}
           <div className="col-span-6">
-            <div className="border rounded-lg bg-white p-6 h-full">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">Leaderboard</h3>
-              <div className="space-y-4">
-                {pairs.map((p) => (
-                  <div key={p.id} className="w-full flex items-center gap-4 p-3 rounded-md bg-white hover:bg-gray-50 transition text-left">
-                    <div className="flex gap-2">
-                      <div className="h-12 w-12 rounded-full bg-gray-300 flex-shrink-0"></div>
-                      <div className="h-12 w-12 rounded-full bg-gray-400 flex-shrink-0"></div>
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-md font-medium text-gray-900">{p.users[0]} &amp; {p.users[1]}</div>
-                      <div className="text-sm text-gray-500">Streak: <span className="font-semibold text-purple-600">{p.streak}d</span></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+              <div className="border rounded-lg bg-white p-6 h-full flex flex-col">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">Your Buddy</h3>
 
-          {/* Right - Chat */}
-          <div className="col-span-6">
-            <div className="border rounded-lg bg-white p-6 h-full flex flex-col">
-              {/* Chat header */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  {activeBuddy ? (
-                    <ProfilePicture userId={activeBuddy.id} size="lg" />
-                  ) : (
-                    <div className="h-12 w-12 rounded-full bg-gray-300"></div>
-                  )}
+              <div className="flex-1 w-full flex flex-col items-center text-center">
+                <div className="flex-1 flex flex-col items-center">
                   <div>
-                    <div className="flex items-center gap-2">
-                      {isButtonLoading && (
-                        <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                        </svg>
-                      )}
-                      <div className="text-lg font-medium text-gray-900">{isButtonLoading ? "Loading..." : (activeBuddy ? activeBuddy.username : "No Buddy")}</div>
-                    </div>
-                    <div className="text-sm text-gray-500">{isButtonLoading ? (
-                      "Loading buddy info..."
-                    ) : activeBuddy ? (
-                      <>Streak: <span className="font-semibold text-purple-600">{activeBuddy.streak || 0}</span></>
+                    {activeBuddy ? (
+                      <ProfilePicture userId={activeBuddy.id} size="3xl" />
                     ) : (
-                      "You currently have no active buddy"
-                    )}</div>
+                      <div className="h-32 w-32 rounded-full bg-gray-300 mx-auto"></div>
+                    )}
                   </div>
+
+                  <div className="mt-4">
+                    <div className="text-2xl font-bold text-gray-900">{activeBuddy ? activeBuddy.username : "No Buddy"}</div>
+                    <div className="text-sm text-gray-500">{activeBuddy ? activeBuddy.school : ""}</div>
+                  </div>
+
+                  <div className="mt-4 text-sm text-gray-700 max-w-md">
+                    {activeBuddy ? (activeBuddy.bio || "No bio available") : "Find a buddy to see their profile and start collaborating."}
+                  </div>
+
+                  {activeBuddy && activeBuddy.interests && activeBuddy.interests.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-2 justify-center">
+                      {activeBuddy.interests.map((it, i) => (
+                        <span key={i} className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">{it}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
+
+                <div className="mt-6 flex items-center gap-3 self-center">
                   <button
-                    type="button"
                     onClick={() => handleLeaveBuddy()}
-                    disabled={isButtonLoading}
-                    className="text-sm text-white bg-red-600 px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isButtonLoading || !activeBuddy}
+                    className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isButtonLoading ? "..." : "Leave Buddy"}
+                    {isButtonLoading ? "Leaving..." : "Leave Buddy"}
                   </button>
 
                   <button
-                    type="button"
                     onClick={() => reportUser()}
-                    disabled={isButtonLoading}
-                    className="text-sm bg-red-50 text-red-600 px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isButtonLoading || !activeBuddy}
+                    className="px-4 py-2 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Report
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Chat area placeholder */}
-              <div className="flex-1 border rounded-md bg-gray-50 p-4 overflow-y-auto">
-                {!activeBuddy ? (
-                  <div className="flex items-center justify-center h-full text-center">
-                    <div>
-                      <div className="text-lg font-medium text-gray-700 mb-2">No active buddy</div>
-                      <div className="text-sm text-gray-500">You currently have no buddy to chat with.</div>
+          {/* Right - Tasks & Chat */}
+          <div className="col-span-6">
+            <div className="space-y-8">
+              {/* Tasks Panel */}
+              <div className="border rounded-lg bg-white p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold">My Task</h3>
+                  <button 
+                  onClick={goToTasks}
+                  className="text-sm px-3 py-1 bg-gray-100 rounded hover:bg-gray-200">Go to Task</button>
+                </div>
+                <div className="text-sm text-gray-500">
+                  {tasksLoading ? (
+                    <div className="text-center text-gray-500">Loading tasks...</div>
+                  ) : userTasks && userTasks.length > 0 ? (
+                    <div className="space-y-3 items-center">
+                      {userTasks.map((t) => (
+                        <div key={t.id} className="p-3 bg-gray-50 rounded">
+                          <div className="text-gray-800">{t.task}</div>
+                        </div>
+                      ))}
+                    
+                      <button 
+                        onClick={goToTasks}
+                        className="text-sm px-3 py-1 bg-gray-100 rounded hover:bg-gray-200">Submit Task
+                      </button>
                     </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-sm text-gray-500">Chat placeholder — messages would appear here.</div>
-                    <div className="mt-6 space-y-4">
-                      <div className="flex">
-                        <div className="h-8 w-8 rounded-full bg-gray-300 mr-3"></div>
-                        <div className="bg-white p-3 rounded-lg shadow">Hey — want to meet for a study session this week?</div>
-                      </div>
-                      <div className="flex justify-end">
-                        <div className="bg-purple-100 p-3 rounded-lg">Sure! How about Thursday?</div>
-                      </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="p-3 bg-gray-50 rounded">No tasks yet — create a task to collaborate with your buddy.</div>
                     </div>
-                  </>
-                )}
+                  )}
+                </div>
               </div>
 
-              {/* Input placeholder */}
-                  <div className="mt-4">
-                <input
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-                  placeholder={activeBuddy ? "Type a message (placeholder)" : "No buddy to message"}
-                  disabled
-                />
+              {/* Chat Panel */}
+              <div className="border rounded-lg bg-white p-6 h-96 flex flex-col">
+                <div className="flex items-center justify-between gap-4 mb-3">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      {activeBuddy ? (
+                          <ProfilePicture userId={activeBuddy.id} size="lg" />
+                      ) : (
+                        <div className="h-24 w-24 rounded-full bg-gray-300 mx-auto"></div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-medium">{activeBuddy ? activeBuddy.username : "No Buddy"}</div>
+                    </div>
+                  </div>
+                    <div className="flex items-center gap-2">
+                      {chatLoading && (
+                        <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                      )}
+                      <button
+                        onClick={goToChat}
+                        disabled={!conversationId || chatLoading || tasksLoading}
+                        className="text-sm px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Go to chat
+                      </button>
+                    </div>
+                </div>
+
+                <div className="flex-1 border rounded-md bg-gray-50 p-4 overflow-y-auto text-sm text-gray-600">
+                  {chatLoading ? (
+                    <div className="text-center text-gray-500">Loading messages...</div>
+                  ) : conversationId ? (
+                    <div className="space-y-3">
+                      {messages && messages.length > 0 ? (
+                        messages.map((m) => (
+                          <div key={m.id || m.created_at} className={`p-2 rounded ${m.sender_id === user?.userId ? "bg-purple-100 self-end" : "bg-white"}`}>
+                            <div className="text-xs text-gray-500">{m.sender_id === user?.userId ? "You" : activeBuddy.username}</div>
+                            <div className="mt-1 text-sm text-gray-800">{m.message || m.text || m.body}</div>
+                            <div className="text-xs">{formatTime(m.created_at)}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center text-gray-500">No messages yet.</div>
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  ) : (
+                    <div className="text-center">No active conversation. Start a conversation with your buddy.</div>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!conversationId || !messageText.trim()) return;
+                      try {
+                        await sendMessage(messageText.trim());
+                        setMessageText("");
+                      } catch (err) {
+                        console.error("Failed to send message:", err);
+                        if (typeof window !== "undefined") window.alert("Failed to send message. See console.");
+                      }
+                    }}
+                  >
+                    <input
+                      ref={messageInputRef}
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                      placeholder={activeBuddy ? "Type a message" : "No buddy to message"}
+                      disabled={!conversationId}
+                    />
+                  </form>
+                </div>
               </div>
             </div>
           </div>
