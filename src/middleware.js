@@ -19,10 +19,10 @@ export async function middleware(request) {
   const setupProfileRoute = "/setup-profile";
   const findBuddyRoute = "/findbuddy";
   // Routes that require both profile AND buddy
-  const fullyProtectedRoutes = ["/home", "/tasks", "chat", "/settings"];
+  const fullyProtectedRoutes = ["/home", "/tasks", "/chat", "/settings"];
   const isFullyProtectedRoute = fullyProtectedRoutes.includes(pathname);
   // Routes that requires Admin status
-  const adminRoute = ["/eaderboard", "/admin", "/banned"];
+  const adminRoute = ["/leaderboard", "/admin", "/banned"];
   const isAdminRoute = adminRoute.includes(pathname);
 
   // Check authentication
