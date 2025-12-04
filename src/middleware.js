@@ -115,11 +115,18 @@ export async function middleware(request) {
   console.log(`[Middleware] Is Banned: ${isBanned}`);
   console.log(`[Middleware] Is Admin: ${isAdmin}`);
 
+  // BANNED USER CHECK - Apply globally for all authenticated users
+  // Allow access only to /banned page and public routes
+  if (authenticated && isBanned && pathname !== "/banned" && !isPublicRoute) {
+    return NextResponse.redirect(new URL("/banned", request.url));
+  }
+
   // PUBLIC ROUTES LOGIC
   if (isPublicRoute) {
     // If user is authenticated and trying to access public routes, redirect based on their state
     // Allow the root landing page to remain accessible even when authenticated.
     if (authenticated && pathname !== "/") {
+      // Banned users should stay on /banned page (handled by global check above)
       // Determine where to redirect based on user's completion state
       if (!hasProfile) {
         return NextResponse.redirect(new URL("/setup-profile", request.url));
@@ -159,9 +166,6 @@ export async function middleware(request) {
       // Already has a buddy, redirect to home
       return NextResponse.redirect(new URL("/home", request.url));
     }
-    if (isBanned) {
-      return NextResponse.redirect(new URL("/banned", request.url));
-    }
     // User has profile but no buddy - allow access to findbuddy
     return response;
   }
@@ -182,9 +186,6 @@ export async function middleware(request) {
     if (!hasBuddy) {
       // Need to find a buddy first
       return NextResponse.redirect(new URL("/findbuddy", request.url));
-    }
-    if (isBanned) {
-      return NextResponse.redirect(new URL("/banned", request.url));
     }
   }
 
