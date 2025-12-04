@@ -79,9 +79,12 @@ function SignInContent() {
       if (isSignedIn) {
         // Refresh auth context before redirecting
         await refreshAuth();
-        // Let middleware handle the redirect based on user profile state
-        // Force a full page reload to trigger middleware checks
-        window.location.href = "/home";
+        // Small delay to ensure cookies are properly set
+        await new Promise(resolve => setTimeout(resolve, 300));
+        // Use router.refresh to update server state, then navigate
+        router.refresh();
+        // Navigate to home - middleware will redirect if needed
+        router.push("/home");
       } else if (nextStep.signInStep === "CONFIRM_SIGN_UP") {
         // User needs to verify email
         setErrors({ general: "Please verify your email first." });

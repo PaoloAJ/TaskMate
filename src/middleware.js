@@ -50,13 +50,23 @@ export async function middleware(request) {
     await runWithAmplifyServerContext({
       nextServerContext: { request, response },
       operation: async (contextSpec) => {
+        // If not authenticated, skip profile checks entirely
+        if (!authenticated) {
+          return {
+            hasProfile: false,
+            hasBuddy: false,
+            isBanned: false,
+            isAdmin: false,
+          };
+        }
+
         try {
           const session = await fetchAuthSession(contextSpec);
           const userId = session.tokens?.accessToken?.payload?.sub;
           const token = session.tokens?.accessToken?.toString();
 
           if (!userId || !token) {
-            return { hasProfile: false, hasBuddy: false };
+            return { hasProfile: false, hasBuddy: false, isBanned: false, isAdmin: false };
           }
 
           // Direct AppSync API call
@@ -84,12 +94,24 @@ export async function middleware(request) {
           });
 
           const result = await apiResponse.json();
+
+          // Check for API errors
+          if (result.errors) {
+            console.log("API errors:", result.errors);
+            return {
+              hasProfile: false,
+              hasBuddy: false,
+              isBanned: false,
+              isAdmin: false,
+            };
+          }
+
           const profile = result.data?.getUserProfile;
           return {
-            hasProfile: profile,
-            hasBuddy: profile?.buddy_id,
-            isBanned: profile?.banned,
-            isAdmin: profile?.admin,
+            hasProfile: !!profile,
+            hasBuddy: !!profile?.buddy_id,
+            isBanned: !!profile?.banned,
+            isAdmin: !!profile?.admin,
           };
         } catch (error) {
           // Suppress "no federated jwt" errors for unauthenticated users
@@ -126,13 +148,13 @@ export async function middleware(request) {
     // If user is authenticated and trying to access public routes, redirect based on their state
     // Allow the root landing page to remain accessible even when authenticated.
     if (authenticated && pathname !== "/") {
-      // Banned users should stay on /banned page (handled by global check above)
-      // Determine where to redirect based on user's completion state
-      if (!hasProfile) {
+      // IMPORTANT: Only redirect if we have valid profile data
+      // This prevents redirect loops when profile check fails temporarily
+      if (!hasProfile && pathname !== "/setup-profile") {
         return NextResponse.redirect(new URL("/setup-profile", request.url));
-      } else if (!hasBuddy) {
+      } else if (hasProfile && !hasBuddy && pathname !== "/findbuddy") {
         return NextResponse.redirect(new URL("/findbuddy", request.url));
-      } else {
+      } else if (hasProfile && hasBuddy && pathname !== "/home") {
         return NextResponse.redirect(new URL("/home", request.url));
       }
     }
