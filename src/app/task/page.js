@@ -503,13 +503,15 @@ export default function TaskPage() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     rows="4"
                   />
-                  <button
-                    onClick={createTaskForBuddy}
-                    disabled={isCreatingTask || !newTaskText.trim()}
-                    className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {isCreatingTask ? "Creating..." : "Create Task"}
-                  </button>
+                  <div className="flex justify-center">
+                    <button
+                      onClick={createTaskForBuddy}
+                      disabled={isCreatingTask || !newTaskText.trim()}
+                      className="bg-blue-500 text-white py-2 px-6 rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isCreatingTask ? "Creating..." : "Create Task"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
