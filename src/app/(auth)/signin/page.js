@@ -79,8 +79,9 @@ function SignInContent() {
       if (isSignedIn) {
         // Refresh auth context before redirecting
         await refreshAuth();
-        // Redirect to setup-profile page
-        router.push("/setup-profile");
+        // Let middleware handle the redirect based on user profile state
+        // Force a full page reload to trigger middleware checks
+        window.location.href = "/home";
       } else if (nextStep.signInStep === "CONFIRM_SIGN_UP") {
         // User needs to verify email
         setErrors({ general: "Please verify your email first." });
